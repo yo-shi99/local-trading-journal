@@ -117,6 +117,7 @@ function renderTrades() {
     const pnl    = getPnl(t);
     const pnlCls = pnl >= 0 ? 'pos' : 'neg';
     const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+    const pnlPct = getPnlPct(t);
     const [y, m, d] = t.date.split('-');
     const dateStr = `${m}/${d}/${y}`;
     const typeLbl = t.type === 'option'
@@ -160,7 +161,7 @@ function renderTrades() {
       <td>${sideLabel}</td>
       <td>${typeLbl}</td>
       <td>${legsSummary(t)}</td>
-      <td class="${pnlCls}" style="font-weight:700">${pnlStr}</td>
+      <td class="${pnlCls}" style="font-weight:700">${pnlStr}${pnlPct !== null ? `<div class="trade-pnl-pct" title="${RISK_BASIS_HINT}">${fmtPnlPct(pnlPct)}</div>` : ''}</td>
       <td>${mistakePills ? `<div class="trade-pills-wrap">${mistakePills}</div>` : '<span class="trade-pills-empty">—</span>'}</td>
       <td>${rulePills   ? `<div class="trade-pills-wrap">${rulePills}</div>`   : '<span class="trade-pills-empty">—</span>'}</td>
       <td>${tagPills    ? `<div class="trade-pills-wrap">${tagPills}</div>`    : '<span class="trade-pills-empty">—</span>'}</td>

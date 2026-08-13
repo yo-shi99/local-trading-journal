@@ -26,20 +26,25 @@ function renderCalendar() {
   // build date → pnl/count map using sell-leg dates (FIFO realized P&L)
   const map = {};
   const monthPrefix = `${yr}-${String(mo + 1).padStart(2,'0')}`;
-  let monthlyPnl = 0;
+  let monthlyPnl = 0, monthlyRisk = 0;
   for (const t of trades) {
     const realizations = t.legs && t.legs.length
       ? getRealizationsByDate(t)
       : { [t.date]: getPnl(t) };
+    const riskByDate = getRiskByDate(t);
     const realizationDates = Object.keys(realizations);
     // A trade is a full close only if all P&L lands on one date and nothing remains open
     const isFullClose = realizationDates.length === 1 && getOpenQty(t) <= 0;
     for (const [date, pnl] of Object.entries(realizations)) {
-      if (!map[date]) map[date] = { pnl: 0, fullCount: 0, partialCount: 0 };
-      map[date].pnl += pnl;
+      if (!map[date]) map[date] = { pnl: 0, risk: 0, fullCount: 0, partialCount: 0 };
+      map[date].pnl  += pnl;
+      map[date].risk += riskByDate[date] || 0;
       if (isFullClose) map[date].fullCount   += 1;
       else             map[date].partialCount += 1;
-      if (date.startsWith(monthPrefix)) monthlyPnl += pnl;
+      if (date.startsWith(monthPrefix)) {
+        monthlyPnl  += pnl;
+        monthlyRisk += riskByDate[date] || 0;
+      }
     }
   }
 
@@ -58,7 +63,9 @@ function renderCalendar() {
 
   const pnlEl  = document.getElementById('monthly-pnl');
   const pnlAbs = Math.round(Math.abs(monthlyPnl)).toLocaleString('en-US');
-  pnlEl.textContent = (monthlyPnl < 0 ? '-$' : '$') + pnlAbs;
+  const monthlyPct = monthlyRisk > 0 ? (monthlyPnl / monthlyRisk) * 100 : null;
+  pnlEl.innerHTML = (monthlyPnl < 0 ? '-$' : '$') + pnlAbs +
+    (monthlyPct !== null ? ` <span class="monthly-pct" title="${RISK_BASIS_HINT}">${fmtPnlPct(monthlyPct)}</span>` : '');
   pnlEl.className   = 'monthly-pnl ' + (monthlyPnl > 0 ? 'pos' : monthlyPnl < 0 ? 'neg' : 'neu');
 
   const firstDow    = new Date(yr, mo, 1).getDay();
@@ -83,9 +90,11 @@ function renderCalendar() {
     else if (takenInfo) cls += ' open-day';
 
     const numHtml   = `<div class="day-num">${d}</div>`;
+    const dayPct    = info && info.risk > 0 ? (info.pnl / info.risk) * 100 : null;
     const pnlHtml   = info ? `
       <div class="day-pnl ${info.pnl >= 0 ? 'pos' : 'neg'}">
         ${info.pnl < 0 ? '-$' : '$'}${Math.round(Math.abs(info.pnl)).toLocaleString('en-US')}
+        ${dayPct !== null ? `<span class="day-pct" title="${RISK_BASIS_HINT}">${fmtPnlPct(dayPct)}</span>` : ''}
       </div>
       ${info.fullCount    ? `<div class="day-count">${info.fullCount} close trade${info.fullCount !== 1 ? 's' : ''}</div>` : ''}
       ${info.partialCount ? `<div class="day-count day-partial">${info.partialCount} partial close${info.partialCount !== 1 ? 's' : ''}</div>` : ''}` : '';
@@ -136,16 +145,18 @@ function renderWeeklySummary() {
     const clampedEnd   = endIso   > monthEndIso   ? monthEndIso   : endIso;
 
     // Aggregate realized P&L by sell date within this week (month-only)
-    let pnl = 0;
+    let pnl = 0, risk = 0;
     const dayPnl = {};
     const tradeIds = new Set();
     for (const t of trades) {
       const realizations = t.legs && t.legs.length
         ? getRealizationsByDate(t)
         : { [t.date]: getPnl(t) };
+      const riskByDate = getRiskByDate(t);
       for (const [date, dp] of Object.entries(realizations)) {
         if (date >= clampedStart && date <= clampedEnd) {
-          pnl += dp;
+          pnl  += dp;
+          risk += riskByDate[date] || 0;
           dayPnl[date] = (dayPnl[date] || 0) + dp;
           tradeIds.add(t.id);
         }
@@ -155,7 +166,7 @@ function renderWeeklySummary() {
     const winDays    = Object.values(dayPnl).filter(p => p > 0).length;
     const lossDays   = Object.values(dayPnl).filter(p => p < 0).length;
 
-    weeks.push({ startIso, endIso, tradeCount, pnl, winDays, lossDays });
+    weeks.push({ startIso, endIso, tradeCount, pnl, risk, winDays, lossDays });
     dayOffset += 7;
   }
 
@@ -172,7 +183,7 @@ function renderWeeklySummary() {
       <div class="week-label">Week ${i + 1}</div>
       <div class="week-dates">${fmtDate(w.startIso)} – ${fmtDate(w.endIso)}</div>
       ${w.tradeCount ? `
-        <div class="week-pnl ${pnlCls}">${pnlStr}</div>
+        <div class="week-pnl ${pnlCls}">${pnlStr}${w.risk > 0 ? `<span class="week-pct" title="${RISK_BASIS_HINT}">${fmtPnlPct((w.pnl / w.risk) * 100)}</span>` : ''}</div>
         <div class="week-meta">${w.tradeCount} trade${w.tradeCount !== 1 ? 's' : ''} &bull; ${w.winDays}W ${w.lossDays}L</div>
       ` : `<div class="week-empty">No trades</div>`}
     </div>`;

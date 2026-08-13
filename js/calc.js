@@ -125,3 +125,77 @@ function computeStats(trades) {
                  : grossWin  > 0 ? '∞' : '—';
   return { totalPnl, wins, losses, grossWin, grossLoss, winRate, avgWin, avgLoss, pf, bestDay, worstDay, total: trades.length };
 }
+
+// Dollar risk for a trade. Uses the stop-loss rows when they are defined,
+// otherwise the whole entry cost is treated as the amount at risk.
+function getTradeRisk(t) {
+  const mult = t.type === 'option' ? 100 : 1;
+
+  if (!t.legs || !t.legs.length) {
+    const risk = Math.abs((parseFloat(t.entryPrice) || 0) * (parseFloat(t.quantity) || 0) * mult);
+    return risk > 0 ? risk : null;
+  }
+
+  const buyLegs     = t.legs.filter(l => l.action === 'buy');
+  const totalBuyQty = buyLegs.reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0);
+  if (!totalBuyQty) return null;
+
+  const avgEntry = buyLegs.reduce((s, l) => s + (parseFloat(l.price) || 0) * (parseFloat(l.quantity) || 0), 0) / totalBuyQty;
+
+  const sls = (t.stopLoss || []).filter(sl =>
+    sl.price !== '' && sl.price !== null && !isNaN(parseFloat(sl.price)) && parseFloat(sl.qty) > 0);
+  if (sls.length) {
+    const stopRisk = Math.abs(sls.reduce((s, sl) =>
+      s + ((parseFloat(sl.price) || 0) - avgEntry) * (parseFloat(sl.qty) || 0) * mult, 0));
+    if (stopRisk > 0) return stopRisk;
+  }
+
+  const cost = Math.abs(avgEntry * totalBuyQty * mult);
+  return cost > 0 ? cost : null;
+}
+
+function getEntryQty(t) {
+  if (!t.legs || !t.legs.length) return parseFloat(t.quantity) || 0;
+  return t.legs.filter(l => l.action === 'buy').reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0);
+}
+
+// Risk attributed to each date P&L was realized on, prorated by the quantity
+// closed that day so partial closes carry only their share of the risk.
+// Mirrors the FIFO order of getRealizationsByDate.
+function getRiskByDate(t) {
+  const risk     = getTradeRisk(t);
+  const entryQty = getEntryQty(t);
+  if (!risk || !entryQty) return {};
+  const perUnit = risk / entryQty;
+
+  if (!t.legs || !t.legs.length) return { [t.date]: risk };
+
+  const buyQueue = t.legs
+    .filter(l => l.action === 'buy')
+    .map(l => ({ remaining: parseFloat(l.quantity) || 0 }));
+
+  const result = {};
+  for (const leg of t.legs) {
+    if (leg.action !== 'sell') continue;
+    const sellDate = leg.date ? leg.date.split('T')[0] : t.date;
+    let left    = parseFloat(leg.quantity) || 0;
+    let matched = 0;
+    for (const buy of buyQueue) {
+      if (buy.remaining <= 0 || left <= 0) continue;
+      const qty = Math.min(buy.remaining, left);
+      buy.remaining -= qty;
+      left          -= qty;
+      matched       += qty;
+    }
+    if (matched > 0) result[sellDate] = (result[sellDate] || 0) + matched * perUnit;
+  }
+  return result;
+}
+
+// P&L as a percentage of the risk behind the closed portion of the trade.
+// null while nothing is closed yet.
+function getPnlPct(t) {
+  const closedRisk = Object.values(getRiskByDate(t)).reduce((s, r) => s + r, 0);
+  if (!closedRisk) return null;
+  return (getPnl(t) / closedRisk) * 100;
+}

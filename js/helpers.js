@@ -31,3 +31,11 @@ function fmtExpiry(dateStr) {
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+function fmtPnlPct(pct, digits) {
+  if (pct === null || pct === undefined || !isFinite(pct)) return '—';
+  const d = digits === undefined ? 1 : digits;
+  return (pct >= 0 ? '+' : '-') + Math.abs(pct).toFixed(d) + '%';
+}
+
+const RISK_BASIS_HINT = 'Percent of risk. Risk = stop loss when set, otherwise the full entry cost.';

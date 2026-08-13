@@ -41,11 +41,14 @@ function refreshWeekModal() {
   const wins   = trades.filter(t => getPnl(t) > 0).length;
   const loss   = trades.filter(t => getPnl(t) < 0).length;
   const pnlCls = pnl >= 0 ? 'pos' : 'neg';
+  const risk   = trades.reduce((s, t) => s + Object.values(getRiskByDate(t)).reduce((r, v) => r + v, 0), 0);
+  const pct    = risk > 0 ? (pnl / risk) * 100 : null;
 
   document.getElementById('day-summary').innerHTML = `
     <div class="ds-card">
       <div class="ds-label">Week P&amp;L</div>
       <div class="ds-value ${pnlCls}">${pnl < 0 ? '-' : ''}$${Math.abs(pnl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+      ${pct !== null ? `<div class="ds-sub ${pnlCls}" title="${RISK_BASIS_HINT}">${fmtPnlPct(pct)}</div>` : ''}
     </div>
     <div class="ds-card">
       <div class="ds-label">Trades</div>
@@ -86,6 +89,7 @@ function tradeItemHtml(t, opts) {
   const p    = getPnl(t);
   const pCls = p >= 0 ? 'pos' : 'neg';
   const pStr = (p < 0 ? '-$' : '$') + Math.abs(p).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const pPct = getPnlPct(t);
   const openQty = getOpenQty(t);
   const unit    = t.type === 'option' ? 'contract' : 'share';
   const openHtml = openQty > 0
@@ -160,6 +164,7 @@ function tradeItemHtml(t, opts) {
     ${summaryHtml}
     <div class="ti-pnl-wrap">
       <div class="ti-pnl ${pCls}">${pStr}</div>
+      ${pPct !== null ? `<div class="ti-pnl-pct ${pCls}" title="${RISK_BASIS_HINT}">${fmtPnlPct(pPct)}</div>` : ''}
       ${openHtml}
     </div>
     <div class="ti-actions">
@@ -265,21 +270,24 @@ function refreshDayModal() {
     : '';
 
   // Day P&L = only the realized P&L settled on this specific date
-  let pnl = 0, wins = 0, loss = 0;
+  let pnl = 0, wins = 0, loss = 0, risk = 0;
   for (const t of trades) {
     const dp = t.legs && t.legs.length
       ? (getRealizationsByDate(t)[activeDate] || 0)
       : getPnl(t);
     pnl += dp;
+    risk += getRiskByDate(t)[activeDate] || 0;
     if (dp > 0) wins++;
     if (dp < 0) loss++;
   }
   const pnlCls = pnl >= 0 ? 'pos' : 'neg';
+  const pct    = risk > 0 ? (pnl / risk) * 100 : null;
 
   document.getElementById('day-summary').innerHTML = `
     <div class="ds-card">
       <div class="ds-label">Day P&amp;L</div>
       <div class="ds-value ${pnlCls}">${pnl < 0 ? '-' : ''}$${Math.abs(pnl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+      ${pct !== null ? `<div class="ds-sub ${pnlCls}" title="${RISK_BASIS_HINT}">${fmtPnlPct(pct)}</div>` : ''}
     </div>
     <div class="ds-card">
       <div class="ds-label">Trades</div>
@@ -330,6 +338,8 @@ function strategyGroupHtml(strategy, trades) {
   const pnl  = trades.reduce((s, t) => s + getPnl(t), 0);
   const pCls = pnl >= 0 ? 'pos' : 'neg';
   const pStr = (pnl < 0 ? '-$' : '$') + Math.abs(pnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const risk = trades.reduce((s, t) => s + Object.values(getRiskByDate(t)).reduce((r, v) => r + v, 0), 0);
+  const pctStr = risk > 0 ? ` (${fmtPnlPct((pnl / risk) * 100)})` : '';
   const sym  = trades[0]?.symbol || '';
   const labelHtml = strategy.label ? `<span class="strategy-label">${escHtml(strategy.label)}</span>` : '';
   const innerHtml = trades.map(t => tradeItemHtml(t, { hideStrategyChip: true })).join('');
@@ -340,7 +350,7 @@ function strategyGroupHtml(strategy, trades) {
       <span class="strategy-meta">${escHtml(sym)} &middot; ${trades.length} leg${trades.length !== 1 ? 's' : ''}</span>
       ${labelHtml}
       <span class="strategy-spacer"></span>
-      <span class="strategy-pnl ${pCls}">Combined ${pStr}</span>
+      <span class="strategy-pnl ${pCls}" title="${RISK_BASIS_HINT}">Combined ${pStr}${pctStr}</span>
       <button class="icon-btn" onclick="openStrategyEditModal('${strategy.id}')" title="Rename strategy">&#9998;</button>
       <button class="icon-btn del" onclick="ungroupStrategyConfirm('${strategy.id}')" title="Ungroup">&#10005;</button>
     </div>
@@ -966,6 +976,16 @@ function updateTSPreview() {
   const plannedR  = (initialTarget != null && tradeRisk != null && tradeRisk !== 0) ? initialTarget / Math.abs(tradeRisk) : null;
   const realizedR = (tradeRisk != null && tradeRisk !== 0) ? realizedPnl / Math.abs(tradeRisk) : null;
 
+  // Percent basis — the stop loss when one is set, otherwise the full entry cost
+  const usingFullCost = !(tradeRisk != null && tradeRisk !== 0);
+  const riskBasis = usingFullCost
+    ? (avgEntry !== null && totalBuyQty > 0 ? Math.abs(avgEntry * totalBuyQty * mult) : null)
+    : Math.abs(tradeRisk);
+  const closedQty = totalBuyQty - bq.reduce((s, b) => s + b.remaining, 0);
+  const pnlPct = (riskBasis && totalBuyQty > 0 && closedQty > 0)
+    ? realizedPnl / (riskBasis * (closedQty / totalBuyQty)) * 100
+    : null;
+
   const fmtMoney = n => n == null ? '—' : (n >= 0 ? '+$' : '-$') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const setEl = (id, text, color) => {
     const el = document.getElementById(id);
@@ -979,9 +999,15 @@ function updateTSPreview() {
   setEl('ts-prev-risk',       fmtMoney(tradeRisk),     moneyColor(tradeRisk));
   setEl('ts-prev-planned-r',  plannedR  != null ? plannedR.toFixed(2)  + 'R' : '—', plannedR  != null ? 'var(--accent)' : 'var(--text-muted)');
   setEl('ts-prev-realized-r', realizedR != null ? realizedR.toFixed(2) + 'R' : '—', realizedR != null ? moneyColor(realizedR) : 'var(--text-muted)');
+  setEl('ts-prev-pnl-pct',    fmtPnlPct(pnlPct), pnlPct != null ? moneyColor(pnlPct) : 'var(--text-muted)');
+
+  const pctItem = document.getElementById('ts-prev-pnl-pct-item');
+  if (pctItem) pctItem.title = usingFullCost
+    ? 'P&L against the full entry cost — no stop loss set'
+    : 'P&L against the stop-loss risk';
 
   const preview = document.getElementById('ts-preview');
-  if (preview) preview.style.display = (initialTarget != null || tradeRisk != null) ? '' : 'none';
+  if (preview) preview.style.display = (initialTarget != null || tradeRisk != null || pnlPct != null) ? '' : 'none';
 }
 
 // ─── TRADE SUMMARY CALCULATION ───

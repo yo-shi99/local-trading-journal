@@ -203,6 +203,7 @@ tbody tr:hover td { background: var(--surface2); }
 }
 .ds-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 5px; }
 .ds-value { font-size: 18px; font-weight: 800; }
+.ds-sub { font-size: 12px; font-weight: 700; margin-top: 3px; opacity: 0.75; }
 .day-hidden-note {
   padding: 8px 12px;
   margin-bottom: 10px;
@@ -234,6 +235,8 @@ tbody tr:hover td { background: var(--surface2); }
 .ti-detail { flex: 1; font-size: 12px; color: var(--text-muted); line-height: 1.7; }
 .ti-pnl-wrap { width: 105px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .ti-pnl { font-size: 16px; font-weight: 800; text-align: right; }
+.trade-pnl-pct { font-size: 11px; font-weight: 700; opacity: 0.75; margin-top: 2px; }
+.ti-pnl-pct { font-size: 12px; font-weight: 700; text-align: right; opacity: 0.75; }
 .ti-open { font-size: 11px; font-weight: 600; color: var(--accent); text-align: right; white-space: nowrap; }
 .ti-actions { flex-shrink: 0; display: flex; gap: 5px; }
 .icon-btn {
