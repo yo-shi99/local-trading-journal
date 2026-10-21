@@ -271,238 +271,120 @@ function closeImportErrors() {
 
 // ─── BACKUP & RESTORE ───
 
-function backupData() {
-  const backup = {
-    version:    9,  // v9: added optionStrategies
-    exportedAt: new Date().toISOString(),
-    settings: {
-      filterState:   (typeof _captureFilterSnapshot === 'function') ? _captureFilterSnapshot() : null,
-      tradePageSize: (typeof tradePageSize !== 'undefined') ? tradePageSize : 100,
-    },
-    trades:       load(),
-    tags:         loadTags(),
-    mistakes:     loadMistakes(),
-    rules:        loadRules(),
-    plans:        loadPlans(),
-    ideas:        loadIdeas(),
-    optionStrategies: typeof loadOptionStrategies        === 'function' ? loadOptionStrategies()         : [],
-    llmQueries:      typeof getLlmQueriesForBackup       === 'function' ? getLlmQueriesForBackup()       : null,
-    llmTradePlans:   typeof getLlmTradePlansForBackup    === 'function' ? getLlmTradePlansForBackup()    : null,
-    banking:         typeof getBankingDataForBackup      === 'function' ? getBankingDataForBackup()      : null,
-  };
-  const json  = JSON.stringify(backup, null, 2);
-  const blob  = new Blob([json], { type: 'application/json' });
-  const url   = URL.createObjectURL(blob);
-  const today = todayStr();
-  const a     = document.createElement('a');
-  a.href     = url;
-  a.download = `trading-journal-backup-${today}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+const TJ_BACKUP_VERSION = 10;
+
+async function backupData() {
+  try {
+    const backup = {
+      format: 'local-trading-journal',
+      version: TJ_BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      databaseVersion: TJ_DB_VERSION,
+      stores: await dbSnapshot(),
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trading-journal-backup-${todayStr()}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    console.error('[TJ] Backup failed:', error);
+    alert('バックアップを作成できませんでした。保存状態を確認してから再試行してください。');
+  }
 }
 
-function restoreData(event) {
-  const file = event.target.files[0];
+// Validate the complete file before any write. Keep support for historical JSON exports.
+function parseJournalBackup(raw) {
+  const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  let stores;
+  if (object(raw) && raw.version === TJ_BACKUP_VERSION) {
+    if (raw.format !== 'local-trading-journal' || raw.databaseVersion !== TJ_DB_VERSION ||
+        typeof raw.exportedAt !== 'string' || !Number.isFinite(Date.parse(raw.exportedAt)) ||
+        !object(raw.stores) || TJ_STORES.some(name => !Object.hasOwn(raw.stores, name))) {
+      throw new Error('バックアップの形式・日時・データベースのバージョンが正しくありません。');
+    }
+    stores = raw.stores;
+  } else {
+    if (!Array.isArray(raw) && (!object(raw) || !Array.isArray(raw.trades) ||
+        (raw.version !== undefined && (!Number.isInteger(raw.version) || raw.version < 1 || raw.version > 9)))) {
+      throw new Error('対応していないバックアップ形式です。');
+    }
+    if (Array.isArray(raw)) stores = { trades: raw };
+    else {
+      stores = {};
+      for (const name of ['trades', 'tags', 'mistakes', 'rules', 'ideas', 'optionStrategies', 'llmTradePlans']) {
+        if (raw[name] != null) stores[name] = raw[name];
+      }
+      if (raw.plans != null) {
+        if (!object(raw.plans)) throw new Error('日別メモの形式が正しくありません。');
+        stores.plans = Object.entries(raw.plans).map(([date, html]) => ({ date, html }));
+      }
+      stores.settings = [];
+      if (raw.settings != null) {
+        if (!object(raw.settings)) throw new Error('設定の形式が正しくありません。');
+        stores.settings.push(...Object.entries(raw.settings).map(([key, value]) => ({ key, value })));
+      }
+      if (raw.llmQueries != null) {
+        if (Array.isArray(raw.llmQueries)) stores.llmQueries = raw.llmQueries;
+        else {
+          if (!object(raw.llmQueries) || !Array.isArray(raw.llmQueries.queries) ||
+              !Array.isArray(raw.llmQueries.categories)) throw new Error('AI質問の形式が正しくありません。');
+          stores.llmQueries = raw.llmQueries.queries;
+          stores.settings.push({ key: 'ltj_llm_categories', value: raw.llmQueries.categories });
+        }
+      }
+      if (raw.banking != null) {
+        if (Array.isArray(raw.banking)) stores.bankingEntries = raw.banking;
+        else {
+          if (!object(raw.banking)) throw new Error('入出金の形式が正しくありません。');
+          stores.bankingAccounts = raw.banking.accounts;
+          stores.bankingEntries = raw.banking.entries;
+        }
+      }
+    }
+  }
+  for (const [name, records] of Object.entries(stores)) {
+    if (!TJ_STORES.includes(name) || !Array.isArray(records)) throw new Error('保存データの形式が正しくありません。');
+    const key = name === 'plans' ? 'date' : name === 'settings' ? 'key' : 'id';
+    const seen = new Set();
+    for (const record of records) {
+      if (!object(record) || typeof record[key] !== 'string' || !record[key].trim() || seen.has(record[key])) {
+        throw new Error(`${name}: 記録のキーが不正、または重複しています。`);
+      }
+      if ((name === 'plans' && (typeof record.html !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(record.date))) ||
+          (name === 'settings' && !Object.hasOwn(record, 'value')) ||
+          (name === 'trades' && (typeof record.symbol !== 'string' ||
+            (record.legs !== undefined && (!Array.isArray(record.legs) || record.legs.some(leg =>
+              !object(leg) || !['buy', 'sell'].includes(leg.action) || !Number.isFinite(Number(leg.price)) ||
+              !Number.isFinite(Number(leg.quantity)) || Number(leg.quantity) <= 0)))))) {
+        throw new Error(`${name}: 記録の内容が正しくありません。`);
+      }
+      seen.add(record[key]);
+    }
+  }
+  return stores;
+}
+
+async function restoreData(event) {
+  const input = event.target;
+  const file = input.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async e => {
-    try {
-    let raw;
-    try {
-      raw = JSON.parse(e.target.result);
-    } catch {
-      alert('Failed to restore: file is not valid JSON.');
-      event.target.value = '';
-      return;
-    }
-
-    // Support legacy backups (plain array of trades)
-    const isLegacy = Array.isArray(raw);
-    const incoming = isLegacy
-      ? { trades: raw, tags: [], mistakes: [], rules: [], plans: {} }
-      : raw;
-
-    if (!Array.isArray(incoming.trades)) {
-      alert('Failed to restore: unrecognised backup format.');
-      event.target.value = '';
-      return;
-    }
-
-    const existingTrades   = load();
-    const existingTags     = loadTags();
-    const existingMistakes = loadMistakes();
-    const existingRules    = loadRules();
-    const existingPlans    = loadPlans();
-    const existingIdeas    = loadIdeas();
-
-    const hasCurrent = existingTrades.length || existingTags.length ||
-                       existingMistakes.length || existingRules.length ||
-                       Object.keys(existingPlans).length || existingIdeas.length;
-
-    if (hasCurrent) {
-      const msg = isLegacy
-        ? 'You have existing data. Restoring a legacy backup will merge trades only. Continue?'
-        : 'You have existing data. Restoring will merge trades, tags, mistakes, rules, daily plans, trade plan ideas, LLM prompts, and LLM trade plans. Backup entries take priority on conflicts. Continue?';
-      if (!confirm(msg)) { event.target.value = ''; return; }
-    }
-
-    // Merge trades — incoming wins on ID conflict (backup updates override local)
-    const existingTradeMap = new Map(existingTrades.map(t => [t.id, t]));
-    let updatedTrades = 0;
-    for (const t of incoming.trades) {
-      if (existingTradeMap.has(t.id)) updatedTrades++;
-      existingTradeMap.set(t.id, t);
-    }
-    const addedTrades = incoming.trades.length - updatedTrades;
-    const mergedTrades = [...existingTradeMap.values()];
-
-    // Merge tags — incoming wins on ID conflict (backup updates override local)
-    const existingTagMap = new Map(existingTags.map(t => [t.id, t]));
-    let updatedTags = 0;
-    for (const t of (incoming.tags || [])) {
-      if (existingTagMap.has(t.id)) updatedTags++;
-      existingTagMap.set(t.id, t);
-    }
-    const mergedTags = [...existingTagMap.values()];
-
-    // Merge mistakes — incoming wins on ID conflict (backup updates override local)
-    const existingMistakeMap = new Map(existingMistakes.map(m => [m.id, m]));
-    let updatedMistakes = 0;
-    for (const m of (incoming.mistakes || [])) {
-      if (existingMistakeMap.has(m.id)) updatedMistakes++;
-      existingMistakeMap.set(m.id, m);
-    }
-    const mergedMistakes = [...existingMistakeMap.values()];
-
-    // Merge rules — incoming wins on ID conflict (backup updates override local)
-    const existingRuleMap = new Map(existingRules.map(r => [r.id, r]));
-    let updatedRules = 0;
-    for (const r of (incoming.rules || [])) {
-      if (existingRuleMap.has(r.id)) updatedRules++;
-      existingRuleMap.set(r.id, r);
-    }
-    const mergedRules = [...existingRuleMap.values()];
-
-    // Merge plans — incoming wins on date conflict (backup plans override local)
-    const incomingPlans = incoming.plans || {};
-    let updatedPlans = 0;
-    let addedPlans = 0;
-    for (const date of Object.keys(incomingPlans)) {
-      if (existingPlans[date] !== undefined) updatedPlans++;
-      else addedPlans++;
-    }
-    const mergedPlans = { ...existingPlans, ...incomingPlans };
-
-    // Merge ideas — incoming wins on ID conflict (backup ideas override local)
-    const existingIdeaMap = new Map(existingIdeas.map(i => [i.id, i]));
-    let updatedIdeas = 0;
-    for (const i of (incoming.ideas || [])) {
-      if (existingIdeaMap.has(i.id)) updatedIdeas++;
-      existingIdeaMap.set(i.id, i);
-    }
-    const addedIdeas  = (incoming.ideas || []).length - updatedIdeas;
-    const mergedIdeas = [...existingIdeaMap.values()];
-
-    // Merge option strategies — incoming wins on ID conflict
-    let mergedStrategies = (typeof loadOptionStrategies === 'function') ? loadOptionStrategies() : [];
-    let addedStrategies   = 0;
-    let updatedStrategies = 0;
-    if (Array.isArray(incoming.optionStrategies) && typeof loadOptionStrategies === 'function') {
-      const stratMap = new Map(mergedStrategies.map(s => [s.id, s]));
-      for (const s of incoming.optionStrategies) {
-        if (!s || !s.id) continue;
-        if (stratMap.has(s.id)) updatedStrategies++;
-        else                    addedStrategies++;
-        stratMap.set(s.id, s);
-      }
-      mergedStrategies = [...stratMap.values()];
-    }
-
-    // Await sequentially to avoid concurrent readwrite transaction contention
-    await save(mergedTrades);
-    await saveTags(mergedTags);
-    await saveMistakes(mergedMistakes);
-    await saveRules(mergedRules);
-    await saveIdeas(mergedIdeas);
-    // Plans need their in-memory cache updated first
-    _plans = mergedPlans;
-    await dbReplaceAll('plans', Object.entries(mergedPlans).map(([date, html]) => ({ date, html })));
-
-    // Persist option strategies, then prune any that now reference deleted trade ids
-    if (typeof loadOptionStrategies === 'function') {
-      _optionStrategies = mergedStrategies;
-      await dbReplaceAll('optionStrategies', mergedStrategies);
-      const tradeIdSet = new Set(mergedTrades.map(t => t.id));
-      await pruneOrphanStrategies(tradeIdSet);
-    }
-
-    let restoredLlmQueries    = false;
-    let restoredLlmTradePlans = false;
-    if (incoming.llmQueries && typeof restoreLlmQueries === 'function') {
-      restoreLlmQueries(incoming.llmQueries);
-      restoredLlmQueries = true;
-    }
-    if (incoming.llmTradePlans && typeof restoreLlmTradePlansFromBackup === 'function') {
-      restoreLlmTradePlansFromBackup(incoming.llmTradePlans);
-      restoredLlmTradePlans = true;
-    }
-    let restoredBankingEntries = 0;
-    if (incoming.banking && typeof restoreBankingFromBackup === 'function') {
-      const bkBefore = typeof getBankingDataForBackup === 'function' ? getBankingDataForBackup().entries.length : 0;
-      await restoreBankingFromBackup(incoming.banking);
-      const bkAfter  = typeof getBankingDataForBackup === 'function' ? getBankingDataForBackup().entries.length : 0;
-      restoredBankingEntries = bkAfter - bkBefore;
-    }
-
-    // Restore settings (tradePageSize, filterState)
-    if (incoming.settings) {
-      const ps = parseInt(incoming.settings.tradePageSize, 10);
-      if (!isNaN(ps) && [50, 100, 200, 250].includes(ps)) {
-        tradePageSize = ps;
-        await dbPutSetting('tradePageSize', ps);
-      }
-      if (incoming.settings.filterState && typeof _applyFilterSnapshot === 'function') {
-        _applyFilterSnapshot(incoming.settings.filterState);
-        await dbPutSetting('filterState', incoming.settings.filterState);
-      }
-    }
-
-    event.target.value = '';
-
-    refreshAllViews();
-
-    const addedTags     = mergedTags.length     - existingTags.length;
-    const addedMistakes = mergedMistakes.length - existingMistakes.length;
-    const addedRules    = mergedRules.length    - existingRules.length;
-
-    const parts = [];
-    if (addedTrades    > 0) parts.push(`${addedTrades} trade${addedTrades !== 1 ? 's' : ''} added`);
-    if (updatedTrades  > 0) parts.push(`${updatedTrades} trade${updatedTrades !== 1 ? 's' : ''} updated`);
-    if (addedTags      > 0) parts.push(`${addedTags} tag${addedTags !== 1 ? 's' : ''} added`);
-    if (updatedTags    > 0) parts.push(`${updatedTags} tag${updatedTags !== 1 ? 's' : ''} updated`);
-    if (addedMistakes  > 0) parts.push(`${addedMistakes} mistake${addedMistakes !== 1 ? 's' : ''} added`);
-    if (updatedMistakes > 0) parts.push(`${updatedMistakes} mistake${updatedMistakes !== 1 ? 's' : ''} updated`);
-    if (addedRules     > 0) parts.push(`${addedRules} rule${addedRules !== 1 ? 's' : ''} added`);
-    if (updatedRules   > 0) parts.push(`${updatedRules} rule${updatedRules !== 1 ? 's' : ''} updated`);
-    if (addedPlans    > 0) parts.push(`${addedPlans} daily plan${addedPlans !== 1 ? 's' : ''} added`);
-    if (updatedPlans  > 0) parts.push(`${updatedPlans} daily plan${updatedPlans !== 1 ? 's' : ''} updated`);
-    if (addedIdeas    > 0) parts.push(`${addedIdeas} trade plan idea${addedIdeas !== 1 ? 's' : ''} added`);
-    if (updatedIdeas  > 0) parts.push(`${updatedIdeas} trade plan idea${updatedIdeas !== 1 ? 's' : ''} updated`);
-    if (addedStrategies   > 0) parts.push(`${addedStrategies} option strateg${addedStrategies !== 1 ? 'ies' : 'y'} added`);
-    if (updatedStrategies > 0) parts.push(`${updatedStrategies} option strateg${updatedStrategies !== 1 ? 'ies' : 'y'} updated`);
-    if (restoredLlmQueries)       parts.push('LLM prompts restored');
-    if (restoredLlmTradePlans)    parts.push('LLM trade plans restored');
-    if (restoredBankingEntries > 0) parts.push(`${restoredBankingEntries} banking entr${restoredBankingEntries !== 1 ? 'ies' : 'y'} added`);
-    if (parts.length === 0) parts.push('nothing new');
-
-    showImportSuccess(parts.join(', ') + ' restored.');
-    } catch (err) {
-      console.error('[TJ] Restore failed:', err);
-      alert('Restore failed: ' + (err.message || String(err)));
-      event.target.value = '';
-    }
-  };
-  reader.readAsText(file);
+  try {
+    const raw = JSON.parse(await file.text());
+    const stores = parseJournalBackup(raw);
+    const count = Object.values(stores).reduce((n, records) => n + records.length, 0);
+    const date = raw.exportedAt ? new Date(raw.exportedAt).toLocaleString() : '不明（旧形式）';
+    if (!confirm(`バックアップ日時: ${date}\n対象: ${count}件\n\n現在のデータを残して統合します。同じID・日付・設定キーがある場合、現在の内容を優先し、上書きしません。完全置換や削除は行いません。\n復元しますか？`)) return;
+    await dbMergeMissing(stores);
+    // Re-read committed data on reload; no partially updated in-memory caches.
+    alert('復元が完了しました。保存内容を読み直します。');
+    window.location.reload();
+  } catch (error) {
+    console.error('[TJ] Restore failed:', error);
+    alert('復元できませんでした。データの統合は完了していません。\n' + (error.message || String(error)));
+  } finally { input.value = ''; }
 }
 
 // close multi-select dropdowns when clicking outside
@@ -565,7 +447,11 @@ document.addEventListener('keydown', e => {
       _applyFilterSnapshot(savedFilterState);
     }
   } catch (e) {
-    console.error('[TJ] Storage init failed — app may not persist data.', e);
+    console.error('[TJ] Storage init failed:', e);
+    _tjUnavailable = true;
+    document.body.inert = true;
+    alert('データベースを開けませんでした。データは削除していません。他のタブを閉じて再読み込みしてください。');
+    return;
   }
 
   // Kick off the UI
