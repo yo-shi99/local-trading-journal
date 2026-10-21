@@ -21,42 +21,107 @@
 const TJ_DB_NAME    = 'trading-journal-db';
 const TJ_DB_VERSION = 5;
 
+const TJ_STORES = ['trades', 'tags', 'mistakes', 'rules', 'ideas',
+  'llmTradePlans', 'llmQueries', 'bankingAccounts', 'bankingEntries',
+  'optionStrategies', 'plans', 'settings'];
 let _tjIdb = null;
+let _tjOpening = null;
+let _tjUnavailable = false;
 
 function _openTjDb() {
+  if (_tjUnavailable) return Promise.reject(new Error('データベースを開けませんでした。再読み込みしてください。'));
   if (_tjIdb) return Promise.resolve(_tjIdb);
-  return new Promise((resolve, reject) => {
+  if (_tjOpening) return _tjOpening;
+  _tjOpening = new Promise((resolve, reject) => {
     let settled = false;
-    const done = (fn, val) => { if (!settled) { settled = true; clearTimeout(timer); fn(val); } };
-
-    // Safety net: if the open request hangs (stuck upgrade lock), delete and retry once
-    const timer = setTimeout(async () => {
-      console.warn('[TJ] DB open timed out — deleting stuck DB and retrying');
-      try {
-        await new Promise((res, rej) => {
-          const del = indexedDB.deleteDatabase(TJ_DB_NAME);
-          del.onsuccess = res;
-          del.onerror   = () => rej(del.error);
-        });
-        _tjIdb = null;
-        _openTjDb().then(resolve, reject);
-      } catch (e) { reject(e); }
-    }, 4000);
-
-    const req = indexedDB.open(TJ_DB_NAME, TJ_DB_VERSION);
-    req.onblocked = () => console.warn('[TJ] DB open blocked by another connection');
-
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      for (const name of ['trades','tags','mistakes','rules','ideas','llmTradePlans','llmQueries','bankingAccounts','bankingEntries','optionStrategies']) {
-        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('plans'))    db.createObjectStore('plans',    { keyPath: 'date' });
-      if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key'  });
+    const fail = error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      _tjUnavailable = true;
+      reject(error);
     };
+    // A slow/blocked open must never delete stored data or retry destructively.
+    const timer = setTimeout(() => fail(new Error('IndexedDB open timed out')), 4000);
+    let req;
+    try { req = indexedDB.open(TJ_DB_NAME, TJ_DB_VERSION); }
+    catch (error) { fail(error); return; }
+    req.onblocked = () => console.warn('[TJ] DB open blocked; close other tabs and reload');
+    req.onupgradeneeded = e => {
+      if (settled) { req.transaction.abort(); return; }
+      const db = e.target.result;
+      for (const name of TJ_STORES) {
+        if (!db.objectStoreNames.contains(name)) {
+          db.createObjectStore(name, { keyPath: name === 'plans' ? 'date' : name === 'settings' ? 'key' : 'id' });
+        }
+      }
+    };
+    req.onsuccess = e => {
+      const db = e.target.result;
+      if (settled) { db.close(); return; }
+      settled = true;
+      clearTimeout(timer);
+      _tjIdb = db;
+      db.onversionchange = () => {
+        db.close();
+        _tjIdb = null;
+        _tjUnavailable = true;
+        document.body.inert = true;
+        alert('データベースが別の画面で更新されました。再読み込みしてください。');
+      };
+      resolve(db);
+    };
+    req.onerror = () => fail(req.error);
+  });
+  return _tjOpening;
+}
 
-    req.onsuccess = e => { _tjIdb = e.target.result; done(resolve, _tjIdb); };
-    req.onerror   = e => done(reject, e.target.error);
+// Resolve writes only after commit, and report failures even when callers log them.
+function _tjWriteComplete(tx, resolve, reject) {
+  tx.oncomplete = () => resolve();
+  const failed = () => {
+    const error = tx.error || new Error('IndexedDB transaction aborted');
+    // Caches may already contain the failed edit. Prevent subsequent stale saves.
+    _tjUnavailable = true;
+    document.body.inert = true;
+    alert('データを保存できませんでした。変更を再度入力する前に、再読み込みして保存状態を確認してください。');
+    reject(error);
+  };
+  tx.onabort = failed;
+}
+
+// Read all stores in one consistent snapshot, including settings omitted by older backups.
+async function dbSnapshot() {
+  const db = await _openTjDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TJ_STORES, 'readonly');
+    const stores = {};
+    for (const name of TJ_STORES) {
+      const req = tx.objectStore(name).getAll();
+      req.onsuccess = () => { stores[name] = req.result; };
+    }
+    tx.oncomplete = () => resolve(stores);
+    tx.onabort = () => reject(tx.error || new Error('Backup read aborted'));
+  });
+}
+
+// Add missing keys only: preserve current records. All stores commit or roll back together.
+async function dbMergeMissing(stores) {
+  const names = Object.keys(stores);
+  if (!names.length) return;
+  const db = await _openTjDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(names, 'readwrite');
+    _tjWriteComplete(tx, resolve, reject);
+    try {
+      for (const name of names) {
+        const store = tx.objectStore(name);
+        for (const record of stores[name]) {
+          const req = store.getKey(record[store.keyPath]);
+          req.onsuccess = () => { if (req.result === undefined) store.add(record); };
+        }
+      }
+    } catch (error) { tx.abort(); }
   });
 }
 
@@ -86,9 +151,9 @@ async function dbGet(storeName, key) {
 async function dbPut(storeName, record) {
   const db = await _openTjDb();
   return new Promise((resolve, reject) => {
-    const req = db.transaction(storeName, 'readwrite').objectStore(storeName).put(record);
-    req.onsuccess = () => resolve();
-    req.onerror   = () => reject(req.error);
+    const tx = db.transaction(storeName, 'readwrite');
+    _tjWriteComplete(tx, resolve, reject);
+    try { tx.objectStore(storeName).put(record); } catch (error) { tx.abort(); }
   });
 }
 
@@ -96,9 +161,9 @@ async function dbPut(storeName, record) {
 async function dbDelete(storeName, key) {
   const db = await _openTjDb();
   return new Promise((resolve, reject) => {
-    const req = db.transaction(storeName, 'readwrite').objectStore(storeName).delete(key);
-    req.onsuccess = () => resolve();
-    req.onerror   = () => reject(req.error);
+    const tx = db.transaction(storeName, 'readwrite');
+    _tjWriteComplete(tx, resolve, reject);
+    try { tx.objectStore(storeName).delete(key); } catch (error) { tx.abort(); }
   });
 }
 
@@ -116,12 +181,12 @@ async function dbReplaceAll(storeName, records) {
       reject(e);
       return;
     }
-    const store = tx.objectStore(storeName);
-    store.clear();
-    for (const r of records) store.put(r);
-    tx.oncomplete = () => resolve();
-    tx.onerror    = () => reject(tx.error);
-    tx.onabort    = () => reject(tx.error || new Error(`Transaction aborted on store "${storeName}"`));
+    _tjWriteComplete(tx, resolve, reject);
+    try {
+      const store = tx.objectStore(storeName);
+      store.clear();
+      for (const r of records) store.put(r);
+    } catch (error) { tx.abort(); }
   });
 }
 
