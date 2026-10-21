@@ -6,6 +6,7 @@ let activeBulkCellDd = null;
 // ─── OPEN / CLOSE ───
 
 function openBulkTradesView() {
+  if (isSimpleJournal()) return;
   state.prevView = state.view;
   initBulkRows();
   document.getElementById('view-bulk').style.display = 'flex';

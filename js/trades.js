@@ -174,4 +174,9 @@ function renderTrades() {
       </td>
     </tr>`;
   }).join('');
+  // Labels for the same table when presented as stacked cards on a phone.
+  const labels = ['番号', '日付', '銘柄', '方向', '種類', '売買回数', '損益', 'ミス', 'ルール', 'タグ', 'メモ', '操作'];
+  tbody.querySelectorAll('tr').forEach(row => {
+    Array.from(row.cells).forEach((cell, index) => { cell.dataset.label = labels[index]; });
+  });
 }

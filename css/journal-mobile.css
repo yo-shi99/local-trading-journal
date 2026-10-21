@@ -1,0 +1,101 @@
+/* Presentation only. Remove body.journal-simple to restore the full UI.
+   Original panels, scripts, form values and database stores remain intact. */
+.leg-mobile-field { display: contents; }
+.leg-field-label { display: none; }
+body.journal-simple :is(#nav-plan, #nav-reports, #nav-banking, #nav-signal-intel,
+  #view-plan, #view-reports, #view-banking, #view-signal-intel, #view-bulk,
+  #add-dropdown-menu, .csv-dl-btn, .csv-ul-btn, .util-dropdown-divider,
+  .trades-toolbar, #gf-type, #day-strat-toolbar, #f-strategy-wrap, #opt-fields,
+  .journal-optional, .trade-strategy-badge, .strategy-group-hdr, .modal-export-btn,
+  #llm-import-overlay, #llm-import-modal, #strategy-edit-overlay) { display: none !important; }
+body.journal-simple #view-trades th:nth-child(5),
+body.journal-simple #view-trades td:nth-child(5) { display: none; }
+body.journal-simple .header { height: auto; min-height: 64px; gap: 12px; flex-wrap: wrap; padding: 12px 20px; }
+body.journal-simple button { min-width: 44px; min-height: 44px; touch-action: manipulation; }
+body.journal-simple :is(.icon-btn, .close-btn, .leg-del-btn, .arrow-btn) { min-width: 44px; height: 44px; }
+body.journal-simple :is(input, select, textarea) { font-size: 16px; }
+body.journal-simple :is(input:not([type=checkbox]), select) { min-height: 44px; }
+body.journal-simple :is(.rule-item, .tag-item, .mistake-item, .gf-multi-item) { min-height: 44px; }
+body.journal-simple :is(.trade-strategy-wrapper, .strategy-group) { min-width: 0; }
+body.journal-simple input[type=checkbox] { width: 44px; height: 44px; min-width: 44px; }
+body.journal-simple :is(.leg-del-btn, .ts-del-btn) { color: var(--text-muted); font-size: 18px; }
+body.journal-simple :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+@media (max-width: 1024px) {
+  body.journal-simple .header { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 12px; gap: 10px; }
+  body.journal-simple .logo { grid-column: 1 / -1; flex-wrap: wrap; }
+  body.journal-simple .nav { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  body.journal-simple .header-spacer { display: none; }
+  body.journal-simple :is(.util-dropdown, .add-dropdown) { width: 100%; min-width: 0; }
+  body.journal-simple :is(.header-add-btn, .header-util-btn) { width: 100%; justify-content: center; padding: 8px; font-size: 13px; }
+  body.journal-simple .add-chevron { display: none; }
+  body.journal-simple .util-dropdown-menu { left: 0; right: auto; max-width: calc(100vw - 24px); }
+  body.journal-simple .main { padding: 12px; }
+  body.journal-simple .stats-bar { padding: 12px; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.journal-simple .stat-card { min-width: 0; padding: 12px; overflow-wrap: anywhere; }
+  body.journal-simple .global-filter-bar { padding: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  body.journal-simple #gf-srch { grid-column: 1 / -1; width: 100%; min-width: 0; max-width: none; }
+  body.journal-simple .global-filter-bar > * { min-width: 0; }
+  body.journal-simple .gf-multi-btn { width: 100%; min-width: 0; white-space: normal; text-align: left; }
+  body.journal-simple .gf-multi-drop { min-width: 0; width: max(100%, 150px); max-width: calc(100vw - 24px); }
+  body.journal-simple .gf-multiselect:nth-child(even) .gf-multi-drop { left: auto; right: 0; }
+  body.journal-simple .gf-active-bar { padding: 8px 12px; flex-wrap: wrap; }
+  body.journal-simple .gf-active-chips { flex-wrap: wrap; }
+  body.journal-simple .gf-dr-popover { position: fixed; inset: 12px 12px auto; min-width: 0; width: auto; max-height: calc(100dvh - 24px); overflow-y: auto; flex-direction: column; }
+  body.journal-simple .gf-dr-cals { flex-direction: column; border: 0; padding: 12px; }
+  body.journal-simple .gf-dr-cal { width: 100%; }
+  body.journal-simple .gf-dr-cal + .gf-dr-cal { margin: 12px 0 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--border); }
+  body.journal-simple .gf-dr-presets { display: grid; grid-template-columns: 1fr 1fr; min-width: 0; }
+  body.journal-simple .gf-dr-day { min-height: 44px; }
+  body.journal-simple .cal-nav { flex-wrap: wrap; gap: 8px; }
+  body.journal-simple .month-label { min-width: 0; flex: 1; font-size: 17px; }
+  body.journal-simple .monthly-pnl { width: 100%; margin: 0; overflow-wrap: anywhere; }
+  body.journal-simple .cal-week-layout { display: block; }
+  body.journal-simple .cal-divider { display: none; }
+  body.journal-simple .weekly-panel { width: 100%; padding-top: 12px; }
+  body.journal-simple .week-box { min-height: 64px; }
+  body.journal-simple .cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+  body.journal-simple .day-cell { padding: 6px 2px; min-height: 86px; min-width: 0; overflow-wrap: anywhere; }
+  body.journal-simple :is(.day-pnl, .day-open-pnl) { font-size: 11px; line-height: 1.3; margin-top: 6px; }
+  body.journal-simple :is(.day-count, .day-open-count, .day-pct) { font-size: 10px; }
+  body.journal-simple .day-num { font-size: 12px; }
+  body.journal-simple .overlay { padding: 8px; }
+  body.journal-simple .modal { min-width: 0; width: 100%; }
+  body.journal-simple :is(.modal-hdr, .modal-body) { padding: 12px; }
+  body.journal-simple .modal-hdr { gap: 8px; }
+  body.journal-simple .modal-hdr-sub { overflow-wrap: anywhere; }
+  body.journal-simple .day-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  body.journal-simple .form-box { padding: 12px; }
+  body.journal-simple :is(.form-row, .form-row.cols3) { grid-template-columns: minmax(0, 1fr); }
+  body.journal-simple :is(.fg, .leg-mobile-field) { min-width: 0; }
+  body.journal-simple .legs-grid-header { display: none; }
+  body.journal-simple .leg-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  body.journal-simple .leg-mobile-field { display: flex; flex-direction: column; gap: 4px; }
+  body.journal-simple .leg-mobile-field:nth-child(2) { grid-column: 1 / -1; }
+  body.journal-simple .leg-field-label { display: block; font-size: 12px; color: var(--text-muted); }
+  body.journal-simple .leg-field { width: 100%; min-width: 0; font-size: 16px; }
+  body.journal-simple .leg-calc-cell { white-space: normal; overflow-wrap: anywhere; }
+  body.journal-simple .leg-calc-cell::before { content: attr(data-label); display: block; font-size: 12px; color: var(--text-muted); }
+  body.journal-simple .legs-footer { flex-wrap: wrap; gap: 10px; }
+  body.journal-simple .targets-sl-wrap { grid-template-columns: minmax(0, 1fr); }
+  body.journal-simple :is(.targets-sl-col, .ts-preview) { min-width: 0; }
+  body.journal-simple :is(.tags-add-row, .mistakes-add-row, .rules-add-row) { flex-wrap: wrap; }
+  body.journal-simple :is(.tags-add-row, .mistakes-add-row, .rules-add-row) input { min-width: 0; flex: 1 1 180px; }
+  body.journal-simple .form-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  body.journal-simple .trade-item { flex-wrap: wrap; gap: 12px; overflow-wrap: anywhere; }
+  body.journal-simple .trade-item > div:first-child { flex-basis: 100% !important; }
+  body.journal-simple :is(.ti-sum-timing, .ti-sum-metrics) { flex: 1 1 100%; width: auto; border: 0; padding: 0; }
+  body.journal-simple .ti-leg-row { flex-wrap: wrap; }
+  body.journal-simple .ti-actions { margin-left: auto; }
+  body.journal-simple #view-trades :is(table, tbody, tr, td) { display: block; width: 100%; }
+  body.journal-simple #view-trades thead { display: none; }
+  body.journal-simple #view-trades tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  body.journal-simple #view-trades td { padding: 0; border: 0; min-width: 0; white-space: normal; max-width: none !important; overflow-wrap: anywhere; }
+  body.journal-simple #view-trades td::before { content: attr(data-label); display: block; color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
+  body.journal-simple #view-trades :is(td:nth-child(11), td:last-child) { grid-column: 1 / -1; }
+  body.journal-simple #view-trades :is(td:nth-child(1), td:nth-child(5)) { display: none; }
+  body.journal-simple #view-trades .empty-row { display: block; }
+  body.journal-simple .trades-table-container { border: 0; background: transparent; }
+  body.journal-simple :is(.trades-pagination, .tpg-left, .tpg-right, .tpg-sizes, .tpg-pages) { flex-wrap: wrap; gap: 8px; }
+  body.journal-simple .table-wrap { overflow: visible; }
+}
