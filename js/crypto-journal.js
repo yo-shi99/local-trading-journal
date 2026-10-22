@@ -54,6 +54,7 @@ function initCryptoFields() {
   const root = document.getElementById('crypto-fields');
   if (root.childElementCount) return;
   root.innerHTML = `
+    ${analysisImportMarkup()}
     ${cryptoChoices('crypto-asset', ['BTC', 'ETH', 'SOL', 'その他'], '銘柄')}
     ${cryptoInput('crypto-symbol-other', 'その他の銘柄', 'text')}
     ${cryptoChoices('crypto-direction', ['Long', 'Short'], '取引方向')}
@@ -79,6 +80,7 @@ function initCryptoFields() {
     <details class="crypto-details" id="crypto-legacy-options"><summary>従来の入力形式</summary>
       <button type="button" id="crypto-legacy-toggle">従来形式で入力する</button>
     </details>`;
+  initAnalysisImport(root);
   root.querySelectorAll('input[name="crypto-asset"], input[name="crypto-strategy"]').forEach(input => input.addEventListener('change', updateCryptoChoices));
   const suggestResult = () => {
     const raw = document.getElementById('crypto-pnl').value;
@@ -117,6 +119,7 @@ function setupCryptoForm(t) {
   document.getElementById('legacy-notes').hidden = cryptoFormActive;
   if (!cryptoFormActive) return;
   const c = t?.cryptoJournal || {};
+  resetAnalysisImport(c.analysisText || '');
   // Existing explicit choices are preserved, including records predating resultMode.
   cryptoResultManual = t ? c.resultMode !== 'auto' : false;
   selectCryptoChoice('crypto-asset', t ? (['BTC', 'ETH', 'SOL'].includes(t.symbol) ? t.symbol : 'その他') : 'BTC');
@@ -137,6 +140,7 @@ function validateCryptoJournal(c) {
   if (!c || c.version !== 1 || !['Long', 'Short'].includes(c.direction) ||
       !validCryptoDateTime(c.entryAt) ||
       (c.exitAt != null && c.exitAt !== '' && (!validCryptoDateTime(c.exitAt) || c.exitAt < c.entryAt)) ||
+      (c.analysisText !== undefined && typeof c.analysisText !== 'string') ||
       !Number.isFinite(c.entryPrice) || c.entryPrice <= 0 || !Number.isFinite(c.positionSize) || c.positionSize <= 0 ||
       ![c.stopLossPrice, c.takeProfitPrice].every(n => n === null || (Number.isFinite(n) && n > 0)) ||
       !(c.realizedPnl === null || Number.isFinite(c.realizedPnl)) || !['', 'Win', 'Loss', 'BE'].includes(c.result) ||
@@ -164,6 +168,7 @@ async function saveCryptoJournalTrade() {
       stopLossPrice: cryptoNumber('crypto-sl'), takeProfitPrice: cryptoNumber('crypto-tp'), positionSize: cryptoNumber('crypto-size'),
       realizedPnl: cryptoNumber('crypto-pnl'), result: selectedCryptoChoice('crypto-result'), strategy: selectedCryptoChoice('crypto-strategy'),
       strategyOther: document.getElementById('crypto-strategy-other').value.trim(),
+      analysisText: document.getElementById('crypto-analysis-text').value,
       entryReason: document.getElementById('crypto-reason').value, review: document.getElementById('crypto-review').value,
       orderFlow: { ...(old?.cryptoJournal?.orderFlow || {}), ...Object.fromEntries(CRYPTO_FLOW_FIELDS.map(([key]) =>
         [key, document.getElementById('crypto-flow-' + key).value])) } };
@@ -204,6 +209,7 @@ function cryptoTradeDetails(t) {
   const text = (label, value) => value ? `<div><strong>${label}</strong><p>${escHtml(value)}</p></div>` : '';
   return `<section class="crypto-trade-details">${cryptoTradeSummary(t)}
     <p>実現損益: ${c.realizedPnl ?? '未入力'}（手入力・${cryptoRealizationDate(t) ? '決済日集計' : '決済日時または金額未登録のため集計対象外'}）</p>
+    ${c.analysisText ? `<details class="crypto-details"><summary>ChatGPT解析テキスト（原文）</summary><pre class="analysis-original">${escHtml(c.analysisText)}</pre></details>` : ''}
     ${text('エントリー根拠', c.entryReason)}${text('振り返り', c.review)}
     <details class="crypto-details"><summary>オーダーフロー・デリバティブ情報</summary>
       ${CRYPTO_FLOW_FIELDS.map(([key, label]) => text(label, c.orderFlow?.[key])).join('')}

@@ -138,3 +138,8 @@ body.journal-simple :focus-visible { outline: 2px solid var(--accent); outline-o
 #screenshot-viewer-close { min-height: 44px; padding: 8px 16px; float: right; }
 #screenshot-viewer-caption { clear: both; overflow-wrap: anywhere; padding: 8px 0; }
 #screenshot-full { display: block; width: 100%; max-height: calc(100dvh - 160px); object-fit: contain; }
+
+#analysis-import { padding: 12px; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+#crypto-analysis-text { min-height: 210px; font-size: 16px; line-height: 1.6; }
+#analysis-apply { width: 100%; min-height: 48px; padding: 12px; border-radius: 8px; background: var(--accent); color: white; border: 0; font: inherit; }
+#analysis-status, .analysis-original { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-family: inherit; }
