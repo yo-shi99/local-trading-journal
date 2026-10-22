@@ -99,3 +99,23 @@ body.journal-simple :focus-visible { outline: 2px solid var(--accent); outline-o
   body.journal-simple :is(.trades-pagination, .tpg-left, .tpg-right, .tpg-sizes, .tpg-pages) { flex-wrap: wrap; gap: 8px; }
   body.journal-simple .table-wrap { overflow: visible; }
 }
+
+/* Crypto journal: additive fields, single-column entry on phones and desktop. */
+[hidden] { display: none !important; }
+#crypto-fields { max-width: 640px; margin: 0 auto 20px; }
+.crypto-field { display: flex; flex-direction: column; gap: 6px; margin: 14px 0; font-size: 14px; color: var(--text-muted); }
+.crypto-field input, .crypto-field textarea { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 16px; }
+.crypto-field textarea { resize: vertical; min-height: 88px; }
+.crypto-choices { border: 0; padding: 0; margin: 14px 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.crypto-choices legend { margin-bottom: 8px; color: var(--text-muted); font-size: 14px; }
+.crypto-choices label { position: relative; flex: 1 1 70px; cursor: pointer; }
+.crypto-choices input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.crypto-choices span { display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.crypto-choices input:checked + span { border-color: var(--accent); background: var(--accent-dim); color: var(--text); }
+.crypto-choices input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.crypto-hint { font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+.crypto-details { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 16px 0; }
+.crypto-details summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
+.crypto-summary { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+.crypto-trade-details { margin: 12px 0; white-space: normal; overflow-wrap: anywhere; }
+.crypto-trade-details p { white-space: pre-wrap; margin: 6px 0 12px; }

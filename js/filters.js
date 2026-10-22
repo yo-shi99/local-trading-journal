@@ -145,6 +145,7 @@ function applyGlobalFilter(trades, opts = {}) {
   if (srch)  filtered = filtered.filter(t => t.symbol.toLowerCase().includes(srch));
   if (fType) filtered = filtered.filter(t => t.type === fType);
   if (fSide) filtered = filtered.filter(t => {
+    if (isCryptoTrade(t)) return t.cryptoJournal.direction.toLowerCase() === fSide;
     if (t.legs && t.legs.length) {
       const firstAction = t.legs[0].action;
       if (fSide === 'long')  return firstAction === 'buy';

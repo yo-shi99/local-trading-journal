@@ -2,7 +2,7 @@ function renderStats() {
   const s = computeStats(applyGlobalFilter(load()));
   const f = (n) => {
     if (n === null) return '—';
-    const abs = Math.round(Math.abs(n)).toLocaleString('en-US');
+    const abs = journalAmount(n, load());
     return (n < 0 ? '-$' : '$') + abs;
   };
   const pnlCls = s.totalPnl > 0 ? 'pos' : s.totalPnl < 0 ? 'neg' : 'neu';

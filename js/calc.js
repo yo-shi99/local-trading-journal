@@ -1,6 +1,7 @@
 // FIFO match buy legs against sell legs.
 // Returns { 'YYYY-MM-DD': realizedPnl, ... } keyed by each sell leg's date.
 function getRealizationsByDate(t) {
+  if (isCryptoTrade(t)) { const date = cryptoRealizationDate(t); return date ? { [date]: t.cryptoJournal.realizedPnl } : {}; }
   if (!t.legs || !t.legs.length) {
     // Legacy format — attribute to trade date
     return { [t.date]: _getPnlLegacy(t) };
@@ -65,6 +66,7 @@ function getRealizationsByDate(t) {
 }
 
 function getOpenQty(t) {
+  if (isCryptoTrade(t)) return t.cryptoJournal.exitAt ? 0 : t.cryptoJournal.positionSize;
   if (!t.legs || !t.legs.length) return 0;
   const buyQueue = t.legs
     .filter(l => l.action === 'buy')
@@ -83,6 +85,7 @@ function getOpenQty(t) {
 }
 
 function getPnl(t) {
+  if (isCryptoTrade(t)) return cryptoRealizationDate(t) ? t.cryptoJournal.realizedPnl : 0;
   if (t.legs && t.legs.length) {
     const total = Object.values(getRealizationsByDate(t)).reduce((s, p) => s + p, 0);
     return Math.round(total * 100) / 100;
@@ -104,11 +107,14 @@ function _getPnlLegacy(t) {
 function computeStats(trades) {
   let totalPnl = 0, wins = 0, losses = 0, grossWin = 0, grossLoss = 0;
   const byDate = {};
+  let positivePnlCount = 0, negativePnlCount = 0;
   for (const t of trades) {
     const p = getPnl(t);
     totalPnl += p;
-    if (p > 0) { wins++;   grossWin  += p; }
-    if (p < 0) { losses++; grossLoss += Math.abs(p); }
+    if (tradeOutcome(t) === 'Win') wins++;
+    if (tradeOutcome(t) === 'Loss') losses++;
+    if (p > 0) { positivePnlCount++; grossWin += p; }
+    if (p < 0) { negativePnlCount++; grossLoss += Math.abs(p); }
     // Use sell dates for best/worst day calculation
     const realizations = t.legs && t.legs.length ? getRealizationsByDate(t) : { [t.date]: p };
     for (const [date, dp] of Object.entries(realizations)) {
@@ -118,9 +124,10 @@ function computeStats(trades) {
   const days     = Object.values(byDate);
   const bestDay  = days.length ? Math.max(...days) : null;
   const worstDay = days.length ? Math.min(...days) : null;
-  const winRate  = trades.length ? ((wins / trades.length) * 100).toFixed(1) : '0.0';
-  const avgWin   = wins   ? Math.round(grossWin  / wins).toLocaleString('en-US')   : null;
-  const avgLoss  = losses ? Math.round(grossLoss / losses).toLocaleString('en-US') : null;
+  const classified = trades.filter(t => !isCryptoTrade(t) || ['Win', 'Loss', 'BE'].includes(tradeOutcome(t))).length;
+  const winRate = classified ? ((wins / classified) * 100).toFixed(1) : '0.0';
+  const avgWin   = positivePnlCount ? Math.round(grossWin / positivePnlCount).toLocaleString('en-US')   : null;
+  const avgLoss  = negativePnlCount ? Math.round(grossLoss / negativePnlCount).toLocaleString('en-US') : null;
   const pf       = grossLoss > 0 ? (grossWin / grossLoss).toFixed(2)
                  : grossWin  > 0 ? '∞' : '—';
   return { totalPnl, wins, losses, grossWin, grossLoss, winRate, avgWin, avgLoss, pf, bestDay, worstDay, total: trades.length };
@@ -129,6 +136,7 @@ function computeStats(trades) {
 // Dollar risk for a trade. Uses the stop-loss rows when they are defined,
 // otherwise the whole entry cost is treated as the amount at risk.
 function getTradeRisk(t) {
+  if (isCryptoTrade(t)) { const c = t.cryptoJournal; return c.stopLossPrice === null ? null : Math.abs(c.entryPrice - c.stopLossPrice) * c.positionSize; }
   const mult = t.type === 'option' ? 100 : 1;
 
   if (!t.legs || !t.legs.length) {
@@ -155,6 +163,7 @@ function getTradeRisk(t) {
 }
 
 function getEntryQty(t) {
+  if (isCryptoTrade(t)) return t.cryptoJournal.positionSize;
   if (!t.legs || !t.legs.length) return parseFloat(t.quantity) || 0;
   return t.legs.filter(l => l.action === 'buy').reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0);
 }
@@ -163,6 +172,7 @@ function getEntryQty(t) {
 // closed that day so partial closes carry only their share of the risk.
 // Mirrors the FIFO order of getRealizationsByDate.
 function getRiskByDate(t) {
+  if (isCryptoTrade(t)) { const date = cryptoRealizationDate(t); return date ? { [date]: getTradeRisk(t) || 0 } : {}; }
   const risk     = getTradeRisk(t);
   const entryQty = getEntryQty(t);
   if (!risk || !entryQty) return {};

@@ -581,6 +581,8 @@
       <div class="form-box" id="trade-form" style="display:none">
         <div class="form-box-title" id="form-title">New Trade</div>
 
+        <section id="crypto-fields" hidden aria-label="暗号資産トレード"></section>
+        <div id="legacy-trade-fields">
         <!-- Symbol + Type -->
         <div class="form-row">
           <div class="fg">
@@ -708,7 +710,8 @@
 
         <hr class="section-divider">
 
-        <div class="form-row cols1">
+        </div><!-- legacy-trade-fields -->
+        <div class="form-row cols1" id="legacy-notes">
           <div class="fg">
             <label>Notes</label>
             <textarea id="f-notes" placeholder="Setup, reason for trade, lessons learned..."></textarea>
@@ -963,6 +966,7 @@
 <script src="js/option-strategies.js"></script>
 <script src="js/wotp-storage.js"></script>
 <script src="js/helpers.js"></script>
+<script src="js/crypto-journal.js"></script>
 <script src="js/wotp-helpers.js"></script>
 <script src="js/wotp-modal.js"></script>
 <script src="js/llm-import.js"></script>

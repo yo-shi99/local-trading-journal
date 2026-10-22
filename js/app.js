@@ -365,6 +365,7 @@ function parseJournalBackup(raw) {
               !Number.isFinite(Number(leg.quantity)) || Number(leg.quantity) <= 0)))))) {
         throw new Error(`${name}: 記録の内容が正しくありません。`);
       }
+      if (name === 'trades' && record.cryptoJournal !== undefined) validateCryptoJournal(record.cryptoJournal);
       seen.add(record[key]);
     }
   }

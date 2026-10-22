@@ -27,6 +27,7 @@ function openWeek(startIso, endIso) {
 
 function refreshWeekModal() {
   const weekTrades = load().filter(t => {
+    if (isCryptoTrade(t)) return cryptoTradeDates(t).some(date => date >= activeWeekStart && date <= activeWeekEnd);
     if (t.legs && t.legs.length)
       return t.legs.some(l => l.date && l.date.split('T')[0] >= activeWeekStart && l.date.split('T')[0] <= activeWeekEnd);
     return t.date >= activeWeekStart && t.date <= activeWeekEnd;
@@ -37,11 +38,14 @@ function refreshWeekModal() {
   const hiddenNote = hidden
     ? `<div class="day-hidden-note">${hidden} trade${hidden !== 1 ? 's' : ''} this week hidden by active filters</div>`
     : '';
-  const pnl    = trades.reduce((s, t) => s + getPnl(t), 0);
-  const wins   = trades.filter(t => getPnl(t) > 0).length;
-  const loss   = trades.filter(t => getPnl(t) < 0).length;
+  const weekPnl = t => isCryptoTrade(t)
+    ? Object.entries(getRealizationsByDate(t)).reduce((sum, [date, value]) => sum + (date >= activeWeekStart && date <= activeWeekEnd ? value : 0), 0)
+    : getPnl(t);
+  const pnl    = trades.reduce((s, t) => s + weekPnl(t), 0);
+  const wins   = trades.filter(t => isCryptoTrade(t) ? Boolean(cryptoRealizationDate(t) >= activeWeekStart && cryptoRealizationDate(t) <= activeWeekEnd && tradeOutcome(t) === 'Win') : weekPnl(t) > 0).length;
+  const loss   = trades.filter(t => isCryptoTrade(t) ? Boolean(cryptoRealizationDate(t) >= activeWeekStart && cryptoRealizationDate(t) <= activeWeekEnd && tradeOutcome(t) === 'Loss') : weekPnl(t) < 0).length;
   const pnlCls = pnl >= 0 ? 'pos' : 'neg';
-  const risk   = trades.reduce((s, t) => s + Object.values(getRiskByDate(t)).reduce((r, v) => r + v, 0), 0);
+  const risk   = trades.reduce((s, t) => s + Object.entries(getRiskByDate(t)).reduce((r, [date, v]) => r + (!isCryptoTrade(t) || (date >= activeWeekStart && date <= activeWeekEnd) ? v : 0), 0), 0);
   const pct    = risk > 0 ? (pnl / risk) * 100 : null;
 
   document.getElementById('day-summary').innerHTML = `
@@ -91,12 +95,12 @@ function tradeItemHtml(t, opts) {
   const pStr = (p < 0 ? '-$' : '$') + Math.abs(p).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   const pPct = getPnlPct(t);
   const openQty = getOpenQty(t);
-  const unit    = t.type === 'option' ? 'contract' : 'share';
+  const unit    = isCryptoTrade(t) ? escHtml(t.symbol) : t.type === 'option' ? 'contract' : 'share';
   const openHtml = openQty > 0
-    ? `<div class="ti-open">${openQty} ${unit}${openQty !== 1 ? 's' : ''} open</div>`
+    ? `<div class="ti-open">${openQty} ${unit}${!isCryptoTrade(t) && openQty !== 1 ? 's' : ''} open</div>`
     : '';
 
-  const typeBadge = t.type === 'option'
+  const typeBadge = isCryptoTrade(t) ? `<span class="badge b-stock">Crypto</span>` : t.type === 'option'
     ? `<span class="badge b-option">OPT</span>
        <span class="badge b-${t.optionType||'call'}">${(t.optionType||'?').toUpperCase()}</span>
        <span style="font-size:11px;color:var(--text-muted)">$${t.strikePrice||'?'}</span>
@@ -109,7 +113,7 @@ function tradeItemHtml(t, opts) {
     legsHtml = `<div class="ti-legs">${t.legs.map(leg => {
       const cls  = leg.action === 'buy' ? 'leg-buy' : 'leg-sell';
       const lbl  = leg.action === 'buy' ? 'Buy' : 'Sell';
-      const unit = t.type === 'option' ? 'c' : 'sh';
+      const unit = isCryptoTrade(t) ? ' ' + escHtml(t.symbol) : t.type === 'option' ? 'c' : 'sh';
       const commFees = (parseFloat(leg.commission)||0) + (parseFloat(leg.fees)||0);
       return `<div class="ti-leg-row ${cls}">
         <span class="ti-leg-action">${lbl}</span>
@@ -154,10 +158,11 @@ function tradeItemHtml(t, opts) {
   return `<div class="trade-item" data-trade-id="${t.id}">
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <div class="ti-sym">${t.symbol}</div>
+        <div class="ti-sym">${escHtml(t.symbol)}</div>
         ${typeBadge}
       </div>
       ${legsHtml}
+      ${cryptoTradeDetails(t)}
       ${t.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;font-style:italic">${escHtml(t.notes)}</div>` : ''}
       ${badgesLine}
     </div>
@@ -258,6 +263,7 @@ function openDay(dateStr) {
 function refreshDayModal() {
   // Include any trade that has at least one leg on this date (multi-day trades included)
   const dayTrades = load().filter(t => {
+    if (isCryptoTrade(t)) return cryptoTradeDates(t).includes(activeDate);
     if (t.legs && t.legs.length)
       return t.legs.some(l => l.date && l.date.split('T')[0] === activeDate);
     return t.date === activeDate;
@@ -277,8 +283,13 @@ function refreshDayModal() {
       : getPnl(t);
     pnl += dp;
     risk += getRiskByDate(t)[activeDate] || 0;
-    if (dp > 0) wins++;
-    if (dp < 0) loss++;
+    if (isCryptoTrade(t)) {
+      if (cryptoRealizationDate(t) === activeDate && tradeOutcome(t) === 'Win') wins++;
+      if (cryptoRealizationDate(t) === activeDate && tradeOutcome(t) === 'Loss') loss++;
+    } else {
+      if (dp > 0) wins++;
+      if (dp < 0) loss++;
+    }
   }
   const pnlCls = pnl >= 0 ? 'pos' : 'neg';
   const pct    = risk > 0 ? (pnl / risk) * 100 : null;
@@ -1075,6 +1086,7 @@ function getTradeSummary(t) {
 }
 
 function tradeItemSummaryHtml(t) {
+  if (isCryptoTrade(t)) return '';
   const s = getTradeSummary(t);
 
   const fmtTime = dt => {
@@ -1160,6 +1172,7 @@ function showForm(id) {
     clearForm();
   }
 
+  setupCryptoForm(id ? load().find(t => t.id === id) : null);
   renderStrategyRowForForm(id);
 
   onTypeChange();
@@ -1300,6 +1313,7 @@ function calcPreview() {
 }
 
 function saveTrade() {
+  if (cryptoFormActive) return saveCryptoJournalTrade();
   const sym  = document.getElementById('f-sym').value.trim().toUpperCase();
   const type = document.getElementById('f-type').value;
 
@@ -1326,6 +1340,7 @@ function saveTrade() {
   const tradeDate = datetimeToDateStr(legs[0].date);
 
   const trade = {
+    ...(editingId ? load().find(t => t.id === editingId) : {}),
     date:          tradeDate,
     symbol:        sym,
     type,
