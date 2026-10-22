@@ -2,6 +2,9 @@ const state = { view: 'calendar', tradesVisited: false };
 
 const APP_VERSION = '1.1.0';
 
+// Presentation-only mode: remove the body class to restore the original interface.
+function isSimpleJournal() { return document.body.classList.contains('journal-simple'); }
+
 
 function toggleUtilDropdown(e) {
   e.stopPropagation();
@@ -38,6 +41,7 @@ document.addEventListener('click', function(e) {
 });
 
 function switchView(v) {
+  if (isSimpleJournal() && !['calendar', 'trades'].includes(v)) v = 'calendar';
   if (typeof _bulkIsActive === 'function' && _bulkIsActive() && !_bulkConfirmLeave()) return;
   if (typeof _bulkCleanup === 'function') _bulkCleanup();
   state.view = v;

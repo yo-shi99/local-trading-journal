@@ -857,6 +857,24 @@ function renderLegsGrid() {
     </div>`;
   }).join('');
 
+  // Keep the original fields and handlers; add visible labels for the mobile layout.
+  const labels = ['売買', '日時', '価格 ($)', '数量', '手数料 ($)', '費用 ($)', '取得額', '売却額', '損益', '明細を削除'];
+  body.querySelectorAll('.leg-row').forEach(row => {
+    Array.from(row.children).forEach((field, index) => {
+      if (field.matches('input, select')) {
+        const label = document.createElement('label');
+        label.className = 'leg-mobile-field';
+        const caption = document.createElement('span');
+        caption.className = 'leg-field-label';
+        caption.textContent = labels[index];
+        field.before(label);
+        label.append(caption, field);
+      } else {
+        field.dataset.label = labels[index];
+        if (field.tagName === 'BUTTON') field.setAttribute('aria-label', labels[index]);
+      }
+    });
+  });
   calcPreview();
 }
 
