@@ -149,7 +149,7 @@ function validateCryptoJournal(c) {
   if (c.strategy === 'その他' && !c.strategyOther.trim()) throw new Error('その他の戦略を入力してください。');
 }
 async function saveCryptoJournalTrade() {
-  if (cryptoSaving) return;
+  if (cryptoSaving || screenshotsBusy) return;
   cryptoSaving = true;
   const button = document.querySelector('#trade-form button[onclick="saveTrade()"]');
   button.disabled = true;
@@ -169,10 +169,12 @@ async function saveCryptoJournalTrade() {
         [key, document.getElementById('crypto-flow-' + key).value])) } };
     validateCryptoJournal(c);
     const trade = { ...(old || {}), id: old?.id || uid(), symbol, type: old?.type || 'stock', date: c.entryAt.split('T')[0],
+      screenshots: screenshotsAsBlobs(screenshotDraft),
       side: c.direction.toLowerCase(), cryptoJournal: c, notes: old?.notes || '',
       tags: getCheckedTagIds(), mistakes: getCheckedMistakeIds(), rules: getCheckedRuleIds(),
       legs: [{ ...(old?.legs?.[0] || {}), id: old?.legs?.[0]?.id || uid(), action: c.direction === 'Long' ? 'buy' : 'sell',
         date: c.entryAt, price: c.entryPrice, quantity: c.positionSize, commission: 0, fees: 0 }] };
+    validateScreenshots(trade.screenshots);
     await dbPut('trades', trade);
     _trades = old ? load().map(t => t.id === trade.id ? trade : t) : [...load(), trade];
     hideForm(); clearForm();

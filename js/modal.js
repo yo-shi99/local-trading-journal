@@ -163,6 +163,7 @@ function tradeItemHtml(t, opts) {
       </div>
       ${legsHtml}
       ${cryptoTradeDetails(t)}
+      ${screenshotsHtml(t)}
       ${t.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;font-style:italic">${escHtml(t.notes)}</div>` : ''}
       ${badgesLine}
     </div>
@@ -704,6 +705,7 @@ function detachTradeStrategyFromForm(tradeId) {
 }
 
 function closeModal() {
+  resetScreenshotDraft(null);
   document.getElementById('day-overlay').classList.remove('open');
   editingId = null;
 }
@@ -1173,6 +1175,7 @@ function showForm(id) {
   }
 
   setupCryptoForm(id ? load().find(t => t.id === id) : null);
+  resetScreenshotDraft(id ? load().find(t => t.id === id) : null);
   renderStrategyRowForForm(id);
 
   onTypeChange();
@@ -1217,6 +1220,7 @@ function cancelForm() {
 }
 
 function clearForm() {
+  resetScreenshotDraft(null);
   ['f-sym', 'f-strike', 'f-expiry', 'f-notes'].forEach(id => {
     document.getElementById(id).value = '';
   });
@@ -1312,7 +1316,10 @@ function calcPreview() {
   updateTSPreview();
 }
 
-function saveTrade() {
+let legacyTradeSaving = false;
+async function saveTrade() {
+  if (legacyTradeSaving) return;
+  if (screenshotsBusy) return alert('画像の圧縮が終わってから保存してください。');
   if (cryptoFormActive) return saveCryptoJournalTrade();
   const sym  = document.getElementById('f-sym').value.trim().toUpperCase();
   const type = document.getElementById('f-type').value;
@@ -1341,6 +1348,7 @@ function saveTrade() {
 
   const trade = {
     ...(editingId ? load().find(t => t.id === editingId) : {}),
+    ...(screenshotDraft.length || (editingId && load().find(t => t.id === editingId)?.screenshots !== undefined) ? { screenshots: screenshotsAsBlobs(screenshotDraft) } : {}),
     date:          tradeDate,
     symbol:        sym,
     type,
@@ -1363,16 +1371,20 @@ function saveTrade() {
     trade.expiryDate  = document.getElementById('f-expiry').value;
   }
 
-  const trades = load();
-  if (editingId) {
-    const idx = trades.findIndex(t => t.id === editingId);
-    if (idx !== -1) { trade.id = editingId; trades[idx] = trade; }
-  } else {
-    trade.id = uid();
-    trades.push(trade);
-  }
-
-  save(trades);
+  const previousId = editingId;
+  trade.id = previousId || uid();
+  legacyTradeSaving = true;
+  const saveButton = document.querySelector('#trade-form button[onclick="saveTrade()"]');
+  saveButton.disabled = true;
+  try {
+    validateScreenshots(trade.screenshots);
+    await dbPut('trades', trade);
+  } catch (error) {
+    console.error('[TJ] Trade save failed:', error);
+    if (!_tjUnavailable) alert('保存できませんでした。既存のトレードは変更していません。');
+    return;
+  } finally { legacyTradeSaving = false; saveButton.disabled = false; }
+  _trades = previousId ? load().map(t => t.id === previousId ? trade : t) : [...load(), trade];
   hideForm();
   clearForm();
 
