@@ -284,7 +284,7 @@ async function backupData() {
       version: TJ_BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
       databaseVersion: TJ_DB_VERSION,
-      stores: await dbSnapshot(),
+      stores: await screenshotsForBackup(await dbSnapshot()),
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -365,6 +365,7 @@ function parseJournalBackup(raw) {
               !Number.isFinite(Number(leg.quantity)) || Number(leg.quantity) <= 0)))))) {
         throw new Error(`${name}: 記録の内容が正しくありません。`);
       }
+      if (name === 'trades') validateScreenshots(record.screenshots);
       if (name === 'trades' && record.cryptoJournal !== undefined) validateCryptoJournal(record.cryptoJournal);
       seen.add(record[key]);
     }
@@ -382,7 +383,8 @@ async function restoreData(event) {
     const count = Object.values(stores).reduce((n, records) => n + records.length, 0);
     const date = raw.exportedAt ? new Date(raw.exportedAt).toLocaleString() : '不明（旧形式）';
     if (!confirm(`バックアップ日時: ${date}\n対象: ${count}件\n\n現在のデータを残して統合します。同じID・日付・設定キーがある場合、現在の内容を優先し、上書きしません。完全置換や削除は行いません。\n復元しますか？`)) return;
-    await dbMergeMissing(stores);
+    const blobStores = screenshotStoresAsBlobs(stores);
+    await dbMergeMissing(blobStores);
     // Re-read committed data on reload; no partially updated in-memory caches.
     alert('復元が完了しました。保存内容を読み直します。');
     window.location.reload();
@@ -465,3 +467,5 @@ document.addEventListener('keydown', e => {
   renderStats();
   renderCalendar();
 })();
+
+initScreenshotUI();

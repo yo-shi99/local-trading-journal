@@ -747,6 +747,17 @@
             </div>
           </div>
         </div>
+        <section id="screenshot-editor" aria-label="スクリーンショット添付">
+          <h3>スクリーンショット（任意・複数可）</h3>
+          <label class="screenshot-picker">画像を選択
+            <input type="file" id="screenshot-input" accept="image/*" multiple>
+          </label>
+          <p class="crypto-hint">長辺1600px以内・品質約80%で端末内圧縮し、圧縮後だけBlobとして保存します。</p>
+          <p id="screenshot-total" aria-live="polite"></p>
+          <p class="crypto-hint">JSONバックアップでは画像が約1.33倍以上の容量になります。保存容量にもご注意ください。</p>
+          <p id="screenshot-status" role="status"></p>
+          <div id="screenshot-draft" class="screenshot-grid"></div>
+        </section>
         <div class="form-actions">
           <button class="btn btn-ghost" onclick="cancelForm()">Cancel</button>
           <button class="btn btn-primary" onclick="saveTrade()">Save Trade</button>
@@ -960,6 +971,11 @@
   </div>
 </div>
 
+<dialog id="screenshot-viewer" aria-labelledby="screenshot-viewer-caption">
+  <button type="button" id="screenshot-viewer-close" aria-label="画像の拡大表示を閉じる">閉じる</button>
+  <p id="screenshot-viewer-caption"></p>
+  <img id="screenshot-full" alt="">
+</dialog>
 <script src="js/db.js"></script>
 <script src="js/migration.js"></script>
 <script src="js/storage.js"></script>
@@ -967,6 +983,7 @@
 <script src="js/wotp-storage.js"></script>
 <script src="js/helpers.js"></script>
 <script src="js/crypto-journal.js"></script>
+<script src="js/screenshots.js"></script>
 <script src="js/wotp-helpers.js"></script>
 <script src="js/wotp-modal.js"></script>
 <script src="js/llm-import.js"></script>
