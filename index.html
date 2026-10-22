@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LocalTradeJournal</title>
+  <meta name="theme-color" content="#102a2b">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/banking.css">
   <link rel="stylesheet" href="css/journal-mobile.css">
@@ -15,7 +19,7 @@
 <header class="header">
   <div class="logo">
     <div class="logo-name">Local<span class="logo-sep"> &rsaquo; </span><span class="logo-trade">Trade</span>Journal</div>
-    <div class="logo-version" id="app-version">v1.5.1</div>
+    <div class="logo-version" id="app-version">v1.6.0</div>
   </div>
   <nav class="nav">
     <button class="nav-btn active" id="nav-cal" onclick="switchView('calendar')">カレンダー</button>
@@ -1002,5 +1006,6 @@
 <script src="js/signal-intel.js"></script>
 <script src="js/llm-trade-plan.js"></script>
 <script src="js/app.js"></script>
+<script src="js/pwa.js"></script>
 </body>
 </html>

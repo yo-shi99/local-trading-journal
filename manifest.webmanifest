@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "Local Trading Journal",
+  "short_name": "トレード日記",
+  "description": "端末内に保存するトレード日記",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#102a2b",
+  "theme_color": "#102a2b",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
