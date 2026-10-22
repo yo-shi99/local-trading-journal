@@ -51,7 +51,7 @@ function renderCalendar() {
   // build date → count of trades taken (entered) that day but NOT closed the same day
   const takenMap = {};
   for (const t of trades) {
-    const firstBuy = t.legs && t.legs.length ? t.legs.find(l => l.action === 'buy') : null;
+    const firstBuy = isCryptoTrade(t) ? t.legs?.[0] : (t.legs && t.legs.length ? t.legs.find(l => l.action === 'buy') : null);
     if (!firstBuy) continue; // legacy trades have no separate entry date (open = close = t.date)
     const entryDate = firstBuy.date ? firstBuy.date.split('T')[0] : t.date;
     const realizations = getRealizationsByDate(t);
@@ -62,7 +62,7 @@ function renderCalendar() {
   }
 
   const pnlEl  = document.getElementById('monthly-pnl');
-  const pnlAbs = Math.round(Math.abs(monthlyPnl)).toLocaleString('en-US');
+  const pnlAbs = journalAmount(monthlyPnl, trades);
   const monthlyPct = monthlyRisk > 0 ? (monthlyPnl / monthlyRisk) * 100 : null;
   pnlEl.innerHTML = (monthlyPnl < 0 ? '-$' : '$') + pnlAbs +
     (monthlyPct !== null ? ` <span class="monthly-pct" title="${RISK_BASIS_HINT}">${fmtPnlPct(monthlyPct)}</span>` : '');
@@ -93,7 +93,7 @@ function renderCalendar() {
     const dayPct    = info && info.risk > 0 ? (info.pnl / info.risk) * 100 : null;
     const pnlHtml   = info ? `
       <div class="day-pnl ${info.pnl >= 0 ? 'pos' : 'neg'}">
-        ${info.pnl < 0 ? '-$' : '$'}${Math.round(Math.abs(info.pnl)).toLocaleString('en-US')}
+        ${info.pnl < 0 ? '-$' : '$'}${journalAmount(info.pnl, trades)}
         ${dayPct !== null ? `<span class="day-pct" title="${RISK_BASIS_HINT}">${fmtPnlPct(dayPct)}</span>` : ''}
       </div>
       ${info.fullCount    ? `<div class="day-count">${info.fullCount} close trade${info.fullCount !== 1 ? 's' : ''}</div>` : ''}
@@ -172,7 +172,7 @@ function renderWeeklySummary() {
 
   document.getElementById('weekly-summary').innerHTML = weeks.map((w, i) => {
     const pnlCls  = w.pnl > 0 ? 'pos' : w.pnl < 0 ? 'neg' : 'neu';
-    const pnlStr  = (w.pnl < 0 ? '-$' : '$') + Math.round(Math.abs(w.pnl)).toLocaleString('en-US');
+    const pnlStr  = (w.pnl < 0 ? '-$' : '$') + journalAmount(w.pnl, trades);
     const fmtDate = iso => {
       const [y, m, d] = iso.split('-');
       return new Date(+y, +m - 1, +d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

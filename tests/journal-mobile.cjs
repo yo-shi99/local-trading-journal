@@ -31,6 +31,7 @@ const baseline = process.env.BASELINE === '1';
     await test('create, reload, tags/mistakes/rules, list, edit, calendar, backup/restore, delete', baseline ? 1280 : 390, async page => {
       if (baseline) await page.evaluate(() => openAddGlobal());
       else await page.locator('.header-add-btn').click();
+      if (!baseline) { await page.locator('#crypto-legacy-options summary').click(); await page.locator('#crypto-legacy-toggle').click(); }
       await page.locator('#f-sym').fill('BTCUSDT');
       await page.locator('.leg-add-btn.buy').click();
       const row = page.locator('.leg-row').first();
@@ -88,6 +89,8 @@ const baseline = process.env.BASELINE === '1';
           assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width, JSON.stringify(bounds));
           await page.locator('#gf-dr-popover .gf-dr-preset-btn').first().click();
           await page.locator('.header-add-btn').click();
+          await page.locator('#crypto-legacy-options summary').click();
+          await page.locator('#crypto-legacy-toggle').click();
           await page.locator('.leg-add-btn.buy').click();
           await page.getByLabel('価格 ($)', { exact: true }).fill('100000');
           await page.getByLabel('数量', { exact: true }).fill('0.001');

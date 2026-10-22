@@ -157,7 +157,7 @@ function renderTrades() {
     return `<tr>
       <td class="col-rownum-cell">${pageOffset + i + 1}</td>
       <td>${dateStr}</td>
-      <td><div><strong>${t.symbol}</strong></div>${stratPill}</td>
+      <td><div><strong>${escHtml(t.symbol)}</strong></div>${stratPill}${cryptoTradeSummary(t)}</td>
       <td>${sideLabel}</td>
       <td>${typeLbl}</td>
       <td>${legsSummary(t)}</td>
