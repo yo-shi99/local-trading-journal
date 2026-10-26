@@ -19,7 +19,7 @@
 <header class="header">
   <div class="logo">
     <div class="logo-name">Local<span class="logo-sep"> &rsaquo; </span><span class="logo-trade">Trade</span>Journal</div>
-    <div class="logo-version" id="app-version">v1.8.0</div>
+    <div class="logo-version" id="app-version">v1.9.0</div>
   </div>
   <nav class="nav">
     <button class="nav-btn active" id="nav-cal" onclick="switchView('calendar')">カレンダー</button>
@@ -751,6 +751,18 @@
             </div>
           </div>
         </div>
+        <section id="exit-update-editor" aria-label="Exit / Update編集">
+          <h3>Exit / Update情報</h3>
+          <p class="crypto-hint">売買の日時・価格・数量・損益はeventsが正本です。この欄は理由・メモ・レビュー専用です。</p>
+          <label class="crypto-field" for="exit-update-reason">Exit理由<textarea id="exit-update-reason" rows="3"></textarea></label>
+          <label class="crypto-field" for="exit-update-memo">Exit時メモ<textarea id="exit-update-memo" rows="3"></textarea></label>
+          <label class="crypto-field" for="exit-update-review">Exitレビュー<textarea id="exit-update-review" rows="3"></textarea></label>
+          <label class="crypto-field" for="exit-update-category">新しい更新画像の分類<select id="exit-update-category"><option value="Exit">Exit</option><option value="Update">Update</option></select></label>
+          <label class="screenshot-picker">Exit / Update画像を追加<input type="file" id="exit-update-input" accept="image/*" multiple></label>
+          <p id="exit-update-status" role="status"></p><div id="exit-update-draft" class="screenshot-grid"></div>
+          <button type="button" id="save-exit-update" class="btn btn-primary" onclick="saveExitUpdateFromForm()" disabled>Exit / Updateのみ保存（Entryは変更しません）</button>
+          <p class="crypto-hint">既存取引の更新専用です。新規取引は下のSave TradeでEntryと一緒に保存してください。既存画像の編集は下のスクリーンショット欄で行えます。</p>
+        </section>
         <section id="screenshot-editor" aria-label="スクリーンショット添付">
           <h3>スクリーンショット（任意・複数可）</h3>
           <label class="screenshot-picker">画像を選択
@@ -991,6 +1003,8 @@
 <script src="js/trade-state.js"></script>
 <script src="js/analysis-import.js"></script>
 <script src="js/screenshots.js"></script>
+<script src="js/exit-update.js"></script>
+<script src="js/trade-history-ui.js"></script>
 <script src="js/wotp-helpers.js"></script>
 <script src="js/wotp-modal.js"></script>
 <script src="js/llm-import.js"></script>

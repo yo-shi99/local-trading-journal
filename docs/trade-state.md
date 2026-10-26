@@ -1,6 +1,7 @@
 # eventsからの取引状態計算（第2段階）
 
 `js/trade-state.js` の純粋計算と読み取りAPI。計算結果を取引レコードへ保存せず、IndexedDB・画像Blob・ChatGPT解析原文・旧Entry/Exit項目に書き込まない。
+第3段階で詳細表示と読取時baselineを追加した。現行仕様は [Entry / Exit分離](entry-exit.md) を参照。
 画面・既存カレンダー集計・既存 `getPnl` 等の表示用APIは今回置換しない。第3段階の画面分離から利用するための計算層である。
 
 ## 呼び出し

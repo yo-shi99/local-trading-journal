@@ -143,3 +143,17 @@ body.journal-simple :focus-visible { outline: 2px solid var(--accent); outline-o
 #crypto-analysis-text { min-height: 210px; font-size: 16px; line-height: 1.6; }
 #analysis-apply { width: 100%; min-height: 48px; padding: 12px; border-radius: 8px; background: var(--accent); color: white; border: 0; font: inherit; }
 #analysis-status, .analysis-original { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-family: inherit; }
+
+.trade-state-panel, .trade-events-panel, .exit-update-panel, #exit-update-editor { margin: 18px 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
+.trade-state-panel h3, .trade-events-panel h3, .exit-update-panel h3, #exit-update-editor h3 { font-size: 16px; margin: 0 0 12px; }
+.trade-state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.trade-state-grid dt, .trade-event-card dt { color: var(--text-muted); font-size: 12px; }
+.trade-state-grid dd, .trade-event-card dd { margin: 4px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.trade-state-warnings { padding-left: 20px; color: var(--red); }
+.trade-event-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.trade-event-card { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.exit-update-panel p { white-space: pre-wrap; }
+#exit-update-input, #exit-update-category, #save-exit-update { width: 100%; min-width: 0; }
+#exit-update-category { min-height: 44px; font: inherit; }
+#save-exit-update { white-space: normal; min-height: 48px; }
+.exit-draft-image { width: 100%; height: 112px; object-fit: cover; display: block; }

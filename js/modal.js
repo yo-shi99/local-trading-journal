@@ -163,6 +163,8 @@ function tradeItemHtml(t, opts) {
       </div>
       ${legsHtml}
       ${cryptoTradeDetails(t)}
+      ${tradeStateAndEventsHtml(t)}
+      ${exitUpdateDetailsHtml(t)}
       ${screenshotsHtml(t)}
       ${t.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;font-style:italic">${escHtml(t.notes)}</div>` : ''}
       ${badgesLine}
@@ -1176,6 +1178,7 @@ function showForm(id) {
 
   setupCryptoForm(id ? load().find(t => t.id === id) : null);
   resetScreenshotDraft(id ? load().find(t => t.id === id) : null);
+  resetExitUpdateDraft(id ? load().find(t => t.id === id) : null);
   renderStrategyRowForForm(id);
 
   onTypeChange();
@@ -1212,6 +1215,7 @@ function hideForm() {
   }
 
   editingId = null;
+  resetExitUpdateDraft(null);
 }
 
 function cancelForm() {
@@ -1221,6 +1225,7 @@ function cancelForm() {
 
 function clearForm() {
   resetScreenshotDraft(null);
+  resetExitUpdateDraft(null);
   ['f-sym', 'f-strike', 'f-expiry', 'f-notes'].forEach(id => {
     document.getElementById(id).value = '';
   });
@@ -1318,6 +1323,7 @@ function calcPreview() {
 
 let legacyTradeSaving = false;
 async function saveTrade() {
+  if (exitUpdateSaving || exitScreenshotsBusy) return;
   if (legacyTradeSaving) return;
   if (screenshotsBusy) return alert('画像の圧縮が終わってから保存してください。');
   if (cryptoFormActive) return saveCryptoJournalTrade();
@@ -1377,6 +1383,7 @@ async function saveTrade() {
   const saveButton = document.querySelector('#trade-form button[onclick="saveTrade()"]');
   saveButton.disabled = true;
   try {
+    Object.assign(trade, applyExitUpdateDraft(trade));
     validateScreenshots(trade.screenshots);
     validateTradeEvents(trade.events);
     await dbPut('trades', trade);
