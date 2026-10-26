@@ -1,6 +1,6 @@
 const state = { view: 'calendar', tradesVisited: false };
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 
 // Presentation-only mode: remove the body class to restore the original interface.
 function isSimpleJournal() { return document.body.classList.contains('journal-simple'); }
@@ -366,6 +366,7 @@ function parseJournalBackup(raw) {
         throw new Error(`${name}: 記録の内容が正しくありません。`);
       }
       if (name === 'trades') validateScreenshots(record.screenshots);
+      if (name === 'trades') validateTradeEvents(record.events);
       if (name === 'trades' && record.cryptoJournal !== undefined) validateCryptoJournal(record.cryptoJournal);
       seen.add(record[key]);
     }

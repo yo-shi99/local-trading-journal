@@ -180,6 +180,7 @@ async function saveCryptoJournalTrade() {
       legs: [{ ...(old?.legs?.[0] || {}), id: old?.legs?.[0]?.id || uid(), action: c.direction === 'Long' ? 'buy' : 'sell',
         date: c.entryAt, price: c.entryPrice, quantity: c.positionSize, commission: 0, fees: 0 }] };
     validateScreenshots(trade.screenshots);
+    validateTradeEvents(trade.events);
     await dbPut('trades', trade);
     _trades = old ? load().map(t => t.id === trade.id ? trade : t) : [...load(), trade];
     hideForm(); clearForm();
