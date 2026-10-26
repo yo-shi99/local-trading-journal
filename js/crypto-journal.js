@@ -54,6 +54,7 @@ function initCryptoFields() {
   const root = document.getElementById('crypto-fields');
   if (root.childElementCount) return;
   root.innerHTML = `
+    <h3>Entry情報</h3><p class="crypto-hint">従来のEntry・分析内容を保持します。Exit理由・レビュー・更新画像は下の独立欄へ入力してください。</p>
     ${analysisImportMarkup()}
     ${cryptoChoices('crypto-asset', ['BTC', 'ETH', 'SOL', 'その他'], '銘柄')}
     ${cryptoInput('crypto-symbol-other', 'その他の銘柄', 'text')}
@@ -72,7 +73,7 @@ function initCryptoFields() {
     ${cryptoChoices('crypto-strategy', CRYPTO_STRATEGIES, '戦略タグ（任意）')}
     ${cryptoInput('crypto-strategy-other', 'その他の戦略', 'text')}
     ${cryptoText('crypto-reason', 'エントリー根拠')}
-    ${cryptoText('crypto-review', '振り返り')}
+    ${cryptoText('crypto-review', '振り返り（従来欄・Entry時メモ）')}
     <details class="crypto-details"><summary>オーダーフロー・デリバティブ情報（任意）</summary>
       <p class="crypto-hint">数値・文章のどちらでも記録できます。</p>
       ${CRYPTO_FLOW_FIELDS.map(([key, label]) => cryptoText('crypto-flow-' + key, label)).join('')}
@@ -153,6 +154,7 @@ function validateCryptoJournal(c) {
   if (c.strategy === 'その他' && !c.strategyOther.trim()) throw new Error('その他の戦略を入力してください。');
 }
 async function saveCryptoJournalTrade() {
+  if (exitUpdateSaving || exitScreenshotsBusy) return;
   if (cryptoSaving || screenshotsBusy) return;
   cryptoSaving = true;
   const button = document.querySelector('#trade-form button[onclick="saveTrade()"]');
@@ -179,6 +181,7 @@ async function saveCryptoJournalTrade() {
       tags: getCheckedTagIds(), mistakes: getCheckedMistakeIds(), rules: getCheckedRuleIds(),
       legs: [{ ...(old?.legs?.[0] || {}), id: old?.legs?.[0]?.id || uid(), action: c.direction === 'Long' ? 'buy' : 'sell',
         date: c.entryAt, price: c.entryPrice, quantity: c.positionSize, commission: 0, fees: 0 }] };
+    Object.assign(trade, applyExitUpdateDraft(trade));
     validateScreenshots(trade.screenshots);
     validateTradeEvents(trade.events);
     await dbPut('trades', trade);
@@ -208,10 +211,10 @@ function cryptoTradeDetails(t) {
   if (!isCryptoTrade(t)) return '';
   const c = t.cryptoJournal;
   const text = (label, value) => value ? `<div><strong>${label}</strong><p>${escHtml(value)}</p></div>` : '';
-  return `<section class="crypto-trade-details">${cryptoTradeSummary(t)}
+  return `<section class="crypto-trade-details"><h3>Entry情報・Entry時分析</h3>${cryptoTradeSummary(t)}
     <p>実現損益: ${c.realizedPnl ?? '未入力'}（手入力・${cryptoRealizationDate(t) ? '決済日集計' : '決済日時または金額未登録のため集計対象外'}）</p>
     ${c.analysisText ? `<details class="crypto-details"><summary>ChatGPT解析テキスト（原文）</summary><pre class="analysis-original">${escHtml(c.analysisText)}</pre></details>` : ''}
-    ${text('エントリー根拠', c.entryReason)}${text('振り返り', c.review)}
+    ${text('エントリー根拠', c.entryReason)}${text('振り返り（従来欄・Entry時メモ）', c.review)}
     <details class="crypto-details"><summary>オーダーフロー・デリバティブ情報</summary>
       ${CRYPTO_FLOW_FIELDS.map(([key, label]) => text(label, c.orderFlow?.[key])).join('')}
     </details></section>`;

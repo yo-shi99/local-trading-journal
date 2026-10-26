@@ -2,6 +2,7 @@
 let screenshotDraft = [];
 let screenshotsBusy = false;
 let screenshotGeneration = 0;
+const SCREENSHOT_CATEGORIES = ['Entry', 'Update', 'Exit', 'Other'];
 function screenshotBytes(bytes) {
   return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
 }
@@ -15,6 +16,7 @@ function validateScreenshots(images) {
         !Number.isInteger(image.width) || !Number.isInteger(image.height) || image.width < 1 || image.height < 1 ||
         Math.max(image.width, image.height) > 1600 || !Number.isSafeInteger(image.size) || image.size < 1 ||
         (!(image.blob instanceof Blob) && typeof image.dataUrl !== 'string')) throw new Error('添付画像の情報が正しくありません。');
+    if (image.category !== undefined && !SCREENSHOT_CATEGORIES.includes(image.category)) throw new Error('添付画像の分類が正しくありません。');
     if (image.blob instanceof Blob) {
       if (image.blob.type !== image.type || image.blob.size !== image.size || image.dataUrl !== undefined) throw new Error('添付Blobの形式・容量が正しくありません。');
       ids.add(image.id);
@@ -105,7 +107,7 @@ function screenshotTiles(images, tradeId) {
   return images.map(image => `<figure class="screenshot-tile">
     <button type="button" class="screenshot-open" data-shot-id="${escHtml(image.id)}" ${tradeId ? `data-shot-trade="${escHtml(tradeId)}"` : ''} aria-label="${escHtml(image.name)}を拡大">
       <img src="${screenshotSource(image)}" alt="${escHtml(image.name)}" loading="lazy"></button>
-    <figcaption>${escHtml(image.name)}<br>${screenshotBytes(image.size)}</figcaption>
+    <figcaption>${escHtml(image.name)}${image.category ? ' · ' + escHtml(image.category) : ''}<br>${screenshotBytes(image.size)}</figcaption>
     ${tradeId ? '' : `<button type="button" class="screenshot-remove" data-shot-remove="${escHtml(image.id)}">この画像を削除</button>`}
   </figure>`).join('');
 }
@@ -120,8 +122,11 @@ function screenshotsHtml(trade) {
   const images = trade.screenshots || [];
   if (!images.length) return '';
   const total = images.reduce((sum, image) => sum + image.size, 0);
+  const groups = [ ['Entry / 未分類', images.filter(image => image.category === undefined || image.category === 'Entry')],
+    ['Update', images.filter(image => image.category === 'Update')], ['Exit', images.filter(image => image.category === 'Exit')],
+    ['Other', images.filter(image => image.category === 'Other')] ];
   return `<section class="trade-screenshots" aria-label="添付画像"><strong>スクリーンショット ${images.length}枚・合計 ${screenshotBytes(total)}</strong>
-    <div class="screenshot-grid">${screenshotTiles(images, trade.id)}</div>
+    ${groups.filter(([, items]) => items.length).map(([label, items]) => `<h4>${label}</h4><div class="screenshot-grid">${screenshotTiles(items, trade.id)}</div>`).join('')}
     <p class="crypto-hint">タップで拡大。画像の追加・削除はトレードの編集画面で行えます。</p></section>`;
 }
 function readScreenshotBlob(blob) {

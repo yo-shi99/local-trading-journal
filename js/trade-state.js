@@ -80,9 +80,51 @@ function calculateEventTradeState(events) {
   return state;
 }
 
-// Read API for phase 3: historical display/aggregation APIs remain unchanged.
+// Read-only baseline. It is never added to the persisted events array.
+function getLegacyEntryBaseline(trade) {
+  let price, quantity, datetime, source;
+  if (isCryptoTrade(trade)) {
+    const c = trade.cryptoJournal;
+    price = c.entryPrice; quantity = c.positionSize; datetime = c.entryAt; source = 'cryptoJournal';
+  } else if (trade.entryPrice !== undefined && trade.quantity !== undefined) {
+    price = Number(trade.entryPrice); quantity = Number(trade.quantity);
+    datetime = trade.entryAt || (trade.date ? trade.date + 'T00:00' : null); source = 'legacy';
+  } else {
+    if (!Array.isArray(trade.legs) || trade.legs.some(leg => !leg || !validCryptoDateTime(leg.date))) return null;
+    const legs = trade.legs
+      .map((leg, index) => ({ leg, index })).sort((a, b) => a.leg.date.localeCompare(b.leg.date) || a.index - b.index);
+    if (!legs.length) return null;
+    const action = legs[0].leg.action;
+    if (!['buy', 'sell'].includes(action)) return null;
+    const opening = [];
+    for (const { leg } of legs) {
+      if (leg.action !== action) break;
+      if (!(Number.isFinite(Number(leg.price)) && Number(leg.price) > 0 && Number.isFinite(Number(leg.quantity)) && Number(leg.quantity) > 0)) return null;
+      opening.push(leg);
+    }
+    quantity = eventStateSum(opening.map(leg => Number(leg.quantity)));
+    price = eventStateSum(opening.map(leg => Number(leg.price) * (Number(leg.quantity) / quantity)));
+    datetime = legs[0].leg.date; source = 'openingLegs';
+  }
+  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(quantity) || quantity <= 0 || !validCryptoDateTime(datetime)) return null;
+  return { price, quantity, datetime, source };
+}
+
+// Detail/read API: legacy aggregate APIs and saved fields remain unchanged.
 function getTradeState(trade) {
-  if (hasTradeEventHistory(trade)) return calculateEventTradeState(trade.events);
+  if (hasTradeEventHistory(trade)) {
+    const state = calculateEventTradeState(trade.events);
+    if (state.issues.some(issue => issue.code === 'INVALID_EVENTS') || trade.events.some(event => event.type === 'Entry')) return state;
+    const baseline = getLegacyEntryBaseline(trade);
+    if (!baseline) return state;
+    let id = '__legacy_entry_baseline__';
+    while (trade.events.some(event => event.id === id)) id += '_';
+    const synthetic = { id, type: 'Entry', ...baseline, realizedPnl: null, reason: '', memo: '' };
+    const derived = calculateEventTradeState([synthetic, ...trade.events]);
+    // Issue indices refer to persisted history, excluding the virtual baseline.
+    for (const issue of derived.issues) if (typeof issue.index === 'number') issue.index--;
+    return { ...derived, baselineUsed: true, baseline };
+  }
   const crypto = isCryptoTrade(trade) ? trade.cryptoJournal : null;
   const summary = crypto ? null : getTradeSummary(trade);
   const totalEntryQuantity = getEntryQty(trade), remainingQuantity = getOpenQty(trade);
