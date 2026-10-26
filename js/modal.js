@@ -1378,6 +1378,7 @@ async function saveTrade() {
   saveButton.disabled = true;
   try {
     validateScreenshots(trade.screenshots);
+    validateTradeEvents(trade.events);
     await dbPut('trades', trade);
   } catch (error) {
     console.error('[TJ] Trade save failed:', error);

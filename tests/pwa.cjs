@@ -74,6 +74,10 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     await page.waitForFunction(() => load().length === 1 && document.getElementById('trade-form').style.display === 'none');
     await page.evaluate(() => closeModal());
     const id = await page.evaluate(() => load()[0].id);
+    const history = await page.evaluate(async id => (await appendTradeEvent(id, {
+      type: 'Entry', datetime: '2026-10-22T10:00', price: 65000, quantity: 0.01,
+      realizedPnl: 0, reason: 'PWA test', memo: 'online',
+    })).events, id);
     const version = JSON.parse(await fs.readFile(path.join(root, 'version.json'))).version;
     const cacheName = `ltj-static:${prefix}:${version}`;
     const cachedUrls = await page.evaluate(async name => (await (await caches.open(name)).keys()).map(r => r.url), cacheName);
@@ -82,6 +86,9 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     console.log('PASS online paste, screenshot compression, save; cache contains only bundled static files');
 
     await context.setOffline(true); await page.reload(); await page.waitForFunction(() => load().length === 1);
+    assert.deepEqual(await page.evaluate(() => load()[0].events), history);
+    await page.evaluate(id => appendTradeEvent(id, { type: 'Add Entry', datetime: '2026-10-22T11:00',
+      price: 64000, quantity: 0.005, realizedPnl: null, reason: '', memo: 'offline' }), id);
     await page.locator('#nav-trades').click(); assert.ok((await page.locator('#trades-body').innerText()).includes('BTC'));
     await page.evaluate(id => editFromTable(id), id);
     await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
@@ -111,6 +118,7 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     console.log('PASS offline new trade, analysis import, new image, reload persistence and backup download');
 
     await context.setOffline(false); await page.reload(); await page.waitForFunction(() => load().length === 2);
+    assert.equal(await page.evaluate(id => load().find(t => t.id === id).events.length, id), 2);
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).cryptoJournal.review, id), 'オフラインで編集');
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).cryptoJournal.analysisText, id), analysis);
     const restoring = page.waitForEvent('load');
