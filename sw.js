@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes.
-const CACHE_VERSION = '1.9.0';
+const CACHE_VERSION = '1.10.0';
 const APP_BASE = new URL('./', self.location.href);
 const CACHE_PREFIX = `ltj-static:${APP_BASE.pathname}:`;
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -14,7 +14,7 @@ const APP_FILES = [
   'css/journal-mobile.css',
   'js/db.js', 'js/migration.js', 'js/storage.js', 'js/option-strategies.js',
   'js/wotp-storage.js', 'js/helpers.js', 'js/crypto-journal.js', 'js/trade-events.js', 'js/trade-state.js',
-  'js/analysis-import.js', 'js/screenshots.js', 'js/exit-update.js', 'js/trade-history-ui.js', 'js/wotp-helpers.js',
+  'js/analysis-import.js', 'js/screenshots.js', 'js/exit-update.js', 'js/update-import-parser.js', 'js/update-import-ui.js', 'js/trade-history-ui.js', 'js/wotp-helpers.js',
   'js/wotp-modal.js', 'js/llm-import.js', 'js/plan.js', 'js/calc.js',
   'js/filters.js', 'js/stats.js', 'js/calendar.js', 'js/trades.js',
   'js/modal.js', 'js/reports.js', 'js/bulk.js', 'js/llm-prompts.js',

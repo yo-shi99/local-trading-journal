@@ -154,6 +154,7 @@ function validateCryptoJournal(c) {
   if (c.strategy === 'その他' && !c.strategyOther.trim()) throw new Error('その他の戦略を入力してください。');
 }
 async function saveCryptoJournalTrade() {
+  if (updateImportSaving || updateImportImagesBusy) return;
   if (exitUpdateSaving || exitScreenshotsBusy) return;
   if (cryptoSaving || screenshotsBusy) return;
   cryptoSaving = true;

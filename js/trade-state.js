@@ -30,7 +30,7 @@ function calculateEventTradeState(events) {
   }
   // Explicit input-index tie break: same-time events retain their stored order.
   const ordered = events.map((event, index) => ({ event, index }))
-    .sort((a, b) => a.event.datetime.localeCompare(b.event.datetime) || a.index - b.index);
+    .sort((a, b) => tradeEventTimeKey(a.event.datetime).localeCompare(tradeEventTimeKey(b.event.datetime)) || a.index - b.index);
   const entries = [], exits = [], profits = [], quantities = [];
   for (const { event, index } of ordered) {
     const entry = event.type === 'Entry' || event.type === 'Add Entry';

@@ -6,7 +6,7 @@ function tradeStateAndEventsHtml(trade) {
     ['最終Exit日時', s.lastExitDatetime], ['最終Exit価格', s.lastExitPrice], ['Add Entry回数', s.addEntryCount],
     ['Partial TP回数', s.partialTpCount], ['Partial SL回数', s.partialSlCount] ];
   const history = Array.isArray(trade.events) ? trade.events.map((event, index) => ({ event, index }))
-    .sort((a, b) => String(a.event?.datetime).localeCompare(String(b.event?.datetime)) || a.index - b.index) : [];
+    .sort((a, b) => tradeEventTimeKey(String(a.event?.datetime)).localeCompare(tradeEventTimeKey(String(b.event?.datetime))) || a.index - b.index) : [];
   return `<section class="trade-state-panel" aria-label="Trade State"><h3>Trade State · ${value(s.status)}</h3>
     ${s.baselineUsed ? '<p class="crypto-hint">旧Entry情報を計算上の基準に使用しています。Entry eventの書込みは行っていません。</p>' : ''}
     ${s.issues.length ? `<ul class="trade-state-warnings" role="status">${s.issues.map(issue => `<li>${value(issue.code)}${issue.message ? ': ' + value(issue.message) : ''}</li>`).join('')}</ul>` : ''}
@@ -15,7 +15,8 @@ function tradeStateAndEventsHtml(trade) {
     <section class="trade-events-panel" aria-label="売買履歴"><h3>売買履歴 / Trade Events</h3>
       <ol class="trade-event-list">${history.map(({ event: e }) => `<li class="trade-event-card"><strong>${value(e?.type)}</strong>
         <p>${value(e?.datetime)}</p><dl><dt>価格</dt><dd>${value(e?.price)}</dd><dt>数量</dt><dd>${value(e?.quantity)}</dd>
-        <dt>実現損益</dt><dd>${value(e?.realizedPnl)}</dd><dt>理由</dt><dd>${value(e?.reason)}</dd><dt>メモ</dt><dd>${value(e?.memo)}</dd></dl></li>`).join('')}</ol></section>`;
+        <dt>実現損益</dt><dd>${value(e?.realizedPnl)}</dd><dt>理由</dt><dd>${value(e?.reason)}</dd><dt>メモ</dt><dd>${value(e?.memo)}</dd></dl>
+        ${e?.rawText !== undefined ? `<details><summary>更新原文</summary><pre class="analysis-original">${value(e.rawText)}</pre></details>` : ''}</li>`).join('')}</ol></section>`;
 }
 
 function exitUpdateDetailsHtml(trade) {
@@ -23,5 +24,6 @@ function exitUpdateDetailsHtml(trade) {
   const update = trade.exitUpdate;
   const field = (label, text) => `<div><strong>${label}</strong><p>${escHtml(text || '')}</p></div>`;
   return `<section class="exit-update-panel" aria-label="Exit / Update情報"><h3>Exit / Update情報</h3>
+    ${update.result ? field('結果', update.result) : ''}
     ${field('Exit理由', update.reason)}${field('Exit時メモ', update.memo)}${field('Exitレビュー', update.review)}</section>`;
 }
