@@ -157,3 +157,12 @@ body.journal-simple :focus-visible { outline: 2px solid var(--accent); outline-o
 #exit-update-category { min-height: 44px; font: inherit; }
 #save-exit-update { white-space: normal; min-height: 48px; }
 .exit-draft-image { width: 100%; height: 112px; object-fit: cover; display: block; }
+
+#update-import { margin: 0 0 20px; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; min-width: 0; }
+#update-import h3 { font-size: 17px; }
+#update-import-target, #update-import-status, #update-import-preview { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; }
+#update-import-text { min-height: 210px; }
+#update-import-input, #update-import-category, #update-import-analyse { width: 100%; min-width: 0; }
+#update-import-category, #update-import-analyse { min-height: 48px; font: inherit; }
+.update-import-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#update-import .update-import-actions button { min-height: 48px; white-space: normal; }

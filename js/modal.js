@@ -1179,6 +1179,7 @@ function showForm(id) {
   setupCryptoForm(id ? load().find(t => t.id === id) : null);
   resetScreenshotDraft(id ? load().find(t => t.id === id) : null);
   resetExitUpdateDraft(id ? load().find(t => t.id === id) : null);
+  resetUpdateImport(id ? load().find(t => t.id === id) : null);
   renderStrategyRowForForm(id);
 
   onTypeChange();
@@ -1216,6 +1217,7 @@ function hideForm() {
 
   editingId = null;
   resetExitUpdateDraft(null);
+  resetUpdateImport(null);
 }
 
 function cancelForm() {
@@ -1226,6 +1228,7 @@ function cancelForm() {
 function clearForm() {
   resetScreenshotDraft(null);
   resetExitUpdateDraft(null);
+  resetUpdateImport(null);
   ['f-sym', 'f-strike', 'f-expiry', 'f-notes'].forEach(id => {
     document.getElementById(id).value = '';
   });
@@ -1323,6 +1326,7 @@ function calcPreview() {
 
 let legacyTradeSaving = false;
 async function saveTrade() {
+  if (updateImportSaving || updateImportImagesBusy) return;
   if (exitUpdateSaving || exitScreenshotsBusy) return;
   if (legacyTradeSaving) return;
   if (screenshotsBusy) return alert('画像の圧縮が終わってから保存してください。');

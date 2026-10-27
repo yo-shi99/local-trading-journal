@@ -101,6 +101,16 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     await page.locator('#nav-trades').click(); assert.ok((await page.locator('#trades-body').innerText()).includes('BTC'));
     await page.evaluate(id => editFromTable(id), id);
     await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
+    const updateText = '更新種別: Partial TP\n日時: 2026-10-22 12:00:04\n価格: 66000\n数量: 0.001 BTC\n実現損益: 0 USDT\n理由: offline update';
+    await page.setInputFiles('#update-import-input', { name: 'offline-update.png', mimeType: 'image/png', buffer: image });
+    await page.waitForFunction(() => !updateImportImagesBusy && updateImportImages.length === 1);
+    await page.locator('#update-import-text').fill(updateText);
+    await page.locator('#update-import-analyse').click();
+    await page.waitForFunction(() => updateImportPending !== null);
+    await page.locator('#update-import-confirm').click();
+    await page.waitForFunction(() => load()[0].events.length === 3 && document.getElementById('trade-form').style.display === 'none');
+    await page.evaluate(id => editFromTable(id), id);
+    await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
     await page.locator('#crypto-review').fill('オフラインで編集');
     await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
     await page.waitForFunction(() => load()[0].cryptoJournal.review === 'オフラインで編集');
@@ -127,11 +137,13 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     console.log('PASS offline new trade, analysis import, new image, reload persistence and backup download');
 
     await context.setOffline(false); await page.reload(); await page.waitForFunction(() => load().length === 2);
-    assert.equal(await page.evaluate(id => load().find(t => t.id === id).events.length, id), 2);
+    assert.equal(await page.evaluate(id => load().find(t => t.id === id).events.length, id), 3);
+    assert.equal(await page.evaluate(id => load().find(t => t.id === id).events.find(e => e.type === 'Partial TP').rawText, id), updateText);
     const offlineState = await page.evaluate(id => getTradeState(load().find(t => t.id === id)), id);
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).exitUpdate.review, id), 'offline Exit review');
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).screenshots.some(image => image.category === 'Exit' && image.blob instanceof Blob), id), true);
-    assert.equal(offlineState.remainingQuantity, 0.015);
+    assert.equal(await page.evaluate(id => load().find(t => t.id === id).screenshots.some(image => image.category === 'Update' && image.blob instanceof Blob), id), true);
+    assert.ok(Math.abs(offlineState.remainingQuantity - 0.014) < 1e-12);
     assert.ok(Math.abs(offlineState.averageEntryPrice - 64666.666666666664) < 1e-8);
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).cryptoJournal.review, id), 'オフラインで編集');
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).cryptoJournal.analysisText, id), analysis);

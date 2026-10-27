@@ -1,5 +1,7 @@
 # Entry / Exit分離とlegacy baseline（第3段階）
 
+第4段階の更新テキスト取り込みは [Update Import](update-import.md) を参照。以下は第3段階の分離・保護方針。
+
 ## 保存構造と互換性
 
 - Entry情報は従来の `cryptoJournal`、`legs`、タグ、原文等を維持する。既存キーの削除・名称変更・自動移動をしない。

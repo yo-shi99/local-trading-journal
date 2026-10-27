@@ -1,5 +1,10 @@
 const TRADE_EVENT_TYPES = ['Entry', 'Add Entry', 'Partial TP', 'Partial SL', 'Final Exit'];
 
+function validTradeEventDateTime(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::[0-5]\d)?$/.test(value) && validCryptoDateTime(value.slice(0, 16));
+}
+function tradeEventTimeKey(value) { return value.length === 16 ? value + ':00' : value; }
+
 // Optional metadata: never synthesize events from legacy Entry/Exit fields.
 function validateTradeEvents(events) {
   if (events === undefined) return;
@@ -8,7 +13,8 @@ function validateTradeEvents(events) {
   for (const event of events) {
     if (!event || typeof event !== 'object' || Array.isArray(event) ||
         typeof event.id !== 'string' || !event.id.trim() || ids.has(event.id) ||
-        !TRADE_EVENT_TYPES.includes(event.type) || !validCryptoDateTime(event.datetime) ||
+        !TRADE_EVENT_TYPES.includes(event.type) || !validTradeEventDateTime(event.datetime) ||
+        (event.rawText !== undefined && typeof event.rawText !== 'string') ||
         !Number.isFinite(event.price) || event.price <= 0 ||
         !Number.isFinite(event.quantity) || event.quantity <= 0 ||
         !(event.realizedPnl === null || Number.isFinite(event.realizedPnl)) ||
@@ -31,14 +37,16 @@ function withTradeEvent(trade, input) {
   validateTradeEvents(trade.events);
   const events = [...getTradeEvents(trade), structuredClone(event)];
   validateTradeEvents(events);
-  events.sort((a, b) => a.datetime.localeCompare(b.datetime));
+  events.sort((a, b) => tradeEventTimeKey(a.datetime).localeCompare(tradeEventTimeKey(b.datetime)));
   return { ...trade, events };
 }
 
 // Read/append/write inside one transaction so simultaneous appends cannot lose events.
-async function appendTradeEvent(tradeId, input) {
+async function appendTradeEvent(tradeId, input, options = {}) {
   if (typeof tradeId !== 'string' || !tradeId.trim()) throw new Error('対象のトレードIDを指定してください。');
   const event = withTradeEvent({ id: tradeId }, input).events[0];
+  const images = options.images?.length ? screenshotsAsBlobs(options.images) : [];
+  const exitPatch = options.exitUpdate ? structuredClone(options.exitUpdate) : null;
   const db = await _openTjDb();
   const trade = await new Promise((resolve, reject) => {
     const tx = db.transaction('trades', 'readwrite');
@@ -49,7 +57,16 @@ async function appendTradeEvent(tradeId, input) {
     request.onsuccess = () => {
       try {
         if (!request.result) throw new Error('対象のトレードが見つかりません。');
+        if (options.beforeAppend) options.beforeAppend(structuredClone(request.result));
         updated = withTradeEvent(request.result, event);
+        if (exitPatch) {
+          updated.exitUpdate = { review: '', reason: '', memo: '', ...updated.exitUpdate, ...exitPatch };
+          validateExitUpdate(updated.exitUpdate);
+        }
+        if (images.length) {
+          updated.screenshots = [...(updated.screenshots || []), ...images];
+          validateScreenshots(updated.screenshots);
+        }
       } catch (error) {
         reject(error);
         return;

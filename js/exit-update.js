@@ -6,7 +6,8 @@ let exitUpdateGeneration = 0;
 function validateExitUpdate(update) {
   if (update === undefined) return;
   if (!update || typeof update !== 'object' || Array.isArray(update) ||
-      !['review', 'reason', 'memo'].every(key => typeof update[key] === 'string')) {
+      !['review', 'reason', 'memo'].every(key => typeof update[key] === 'string') ||
+      (update.result !== undefined && !['Win', 'Loss', 'BE'].includes(update.result))) {
     throw new Error('Exit / Updateのレビュー・理由・メモの形式を確認してください。');
   }
 }
@@ -68,6 +69,7 @@ function applyExitUpdateDraft(trade) {
 }
 
 async function saveExitUpdateFromForm() {
+  if (updateImportSaving || updateImportImagesBusy) return;
   if (!editingId || exitUpdateSaving || exitScreenshotsBusy || screenshotsBusy || cryptoSaving || legacyTradeSaving) return;
   const id = editingId;
   exitUpdateSaving = true;

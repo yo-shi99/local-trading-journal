@@ -23,7 +23,7 @@ UI変更・平均建値・残数量・累計実現損益の計算・Exit更新�
 ```
 
 - `type`: `Entry` / `Add Entry` / `Partial TP` / `Partial SL` / `Final Exit`。
-- `datetime`: 既存フォームと同じローカル日時 `YYYY-MM-DDTHH:mm`。タイムゾーンの推測・変換をしない。
+- `datetime`: ローカル日時 `YYYY-MM-DDTHH:mm`。第4段階からeventsのみ任意の秒 `:ss` も保持できる。旧Entryフォームの解析は変更せず、タイムゾーンの推測・変換をしない。
 - `price` / `quantity`: 有限の正数。小数をそのまま保持する。数量は銘柄の数量で、契約枚数・レバレッジ等の換算はしない。
 - `realizedPnl`: 有限数または未記録の `null`。0・正数・負数は別々に保持し、イベント種別から符号を決めない。将来の集計では各イベント単体の損益として扱い、累計値を入力しない。
 - `reason` / `memo`: 文字列。追記APIで省略した場合は空文字。

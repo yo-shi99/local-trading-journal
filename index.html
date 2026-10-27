@@ -19,7 +19,7 @@
 <header class="header">
   <div class="logo">
     <div class="logo-name">Local<span class="logo-sep"> &rsaquo; </span><span class="logo-trade">Trade</span>Journal</div>
-    <div class="logo-version" id="app-version">v1.9.0</div>
+    <div class="logo-version" id="app-version">v1.10.0</div>
   </div>
   <nav class="nav">
     <button class="nav-btn active" id="nav-cal" onclick="switchView('calendar')">カレンダー</button>
@@ -585,6 +585,18 @@
       <div class="form-box" id="trade-form" style="display:none">
         <div class="form-box-title" id="form-title">New Trade</div>
 
+        <section id="update-import" hidden aria-label="ChatGPT更新テキスト取り込み">
+          <h3>ChatGPT更新テキストを貼り付け</h3>
+          <p id="update-import-target"></p>
+          <p class="crypto-hint">現在の取引だけに更新を追加します。Entry欄の内容・分析・未保存編集は反映しません。新規Entry解析とは別の機能です。</p>
+          <label class="crypto-field" for="update-import-text">ChatGPT更新テキスト<textarea id="update-import-text" rows="10" placeholder="更新種別: Partial TP&#10;日時: 2026-10-27 10:15&#10;価格: 78800&#10;数量: 0.005 BTC&#10;実現損益: 7.05 USDT"></textarea></label>
+          <label class="crypto-field" for="update-import-category">更新画像の分類<select id="update-import-category"><option value="Update">Update</option><option value="Exit">Exit</option><option value="Entry">Entry</option><option value="Other">Other</option></select></label>
+          <label class="screenshot-picker">今回の更新画像を追加<input id="update-import-input" type="file" accept="image/*" multiple></label>
+          <div id="update-import-images" class="screenshot-grid"></div>
+          <button type="button" id="update-import-analyse" class="btn btn-primary" onclick="analyseUpdateImport()">解析して確認</button>
+          <p id="update-import-status" role="status"></p><pre id="update-import-preview"></pre>
+          <div class="update-import-actions"><button type="button" class="btn btn-ghost" id="update-import-cancel" onclick="cancelUpdateImport()">キャンセル</button><button type="button" class="btn btn-primary" id="update-import-confirm" onclick="confirmUpdateImport()" disabled>この更新を追加</button></div>
+        </section>
         <section id="crypto-fields" hidden aria-label="暗号資産トレード"></section>
         <div id="legacy-trade-fields">
         <!-- Symbol + Type -->
@@ -1004,6 +1016,8 @@
 <script src="js/analysis-import.js"></script>
 <script src="js/screenshots.js"></script>
 <script src="js/exit-update.js"></script>
+<script src="js/update-import-parser.js"></script>
+<script src="js/update-import-ui.js"></script>
 <script src="js/trade-history-ui.js"></script>
 <script src="js/wotp-helpers.js"></script>
 <script src="js/wotp-modal.js"></script>

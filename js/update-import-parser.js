@@ -1,0 +1,128 @@
+// Separate from New Entry analysis: no field guessing, writes, or network access.
+function updateImportKey(value) { return value.normalize('NFKC').toLowerCase().replace(/[\s_\-/／&＆*`]/g, ''); }
+function updateImportTypeKey(value) { return value.normalize('NFKC').toLowerCase().replace(/\s/g, ''); }
+const UPDATE_IMPORT_TYPES = new Map();
+for (const [type, names] of Object.entries({
+  'Add Entry': ['Add Entry', 'AddEntry', '追加エントリー'],
+  'Partial TP': ['Partial TP', 'PartialTP', '部分利確'],
+  'Partial SL': ['Partial SL', 'PartialSL', '部分損切り'],
+  'Final Exit': ['Final Exit', 'FinalExit', 'Exit', '全決済', '最終決済'],
+})) for (const name of names) UPDATE_IMPORT_TYPES.set(updateImportTypeKey(name), type);
+const UPDATE_IMPORT_KEYS = new Map();
+for (const [key, names] of Object.entries({
+  type: ['更新種別', 'Update Type'],
+  datetime: ['日時', '約定日時', '決済日時', 'Entry日時', 'Exit日時'],
+  price: ['価格', '約定価格', 'エントリー価格', 'Entry価格', '決済価格', 'Exit価格', 'TP価格', 'SL価格'],
+  quantity: ['数量', '決済数量', 'Entry数量', 'ポジションサイズ', 'Qty', 'Size'],
+  realizedPnl: ['実現損益', 'Realized P&L', 'Realized PnL', 'P&L', 'PnL'],
+  reason: ['理由', 'Exit理由', 'Entry理由', '利確理由', '損切り理由'],
+  memo: ['メモ', 'コメント'], review: ['振り返り'], result: ['結果'],
+})) for (const name of names) UPDATE_IMPORT_KEYS.set(updateImportKey(name), key);
+
+function updateImportNumber(raw) {
+  const text = raw.normalize('NFKC').trim().replace(/−/g, '-');
+  const match = text.match(/^(?:[$¥]\s*)?([+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(?:\s*([A-Za-z][A-Za-z0-9]{0,15}|枚|%))?$/i);
+  if (!match) return undefined;
+  const number = Number(match[1].replace(/,/g, ''));
+  return Number.isFinite(number) ? { number, unit: match[2] || '' } : undefined;
+}
+function updateImportDatetime(raw) {
+  const match = raw.normalize('NFKC').trim().match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return undefined;
+  const [, y, m, d, h, minute, second] = match;
+  const result = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T${h.padStart(2, '0')}:${minute}${second === undefined ? '' : ':' + second}`;
+  return validTradeEventDateTime(result) ? result : undefined;
+}
+
+function parseUpdateImportText(rawText) {
+  const fields = {}, units = {}, errors = [], warnings = [], unknown = [], blocks = [];
+  let current = null;
+  for (const line of rawText.split(/\r?\n/)) {
+    const clean = line.trim().replace(/^[-*•]\s+/, '').replace(/^\d+[.)]\s+/, '');
+    if (/^```/.test(clean)) continue;
+    const match = clean.match(/^([^:：]{1,80})[:：]\s*(.*)$/);
+    if (match) {
+      const label = match[1].replace(/[*`]/g, '').trim(), key = UPDATE_IMPORT_KEYS.get(updateImportKey(label));
+      current = { key, label, value: match[2].replace(/^\*\*\s*/, '') };
+      blocks.push(current);
+    } else if (current) current.value += '\n' + line;
+  }
+  const seen = new Set();
+  for (const block of blocks) {
+    const { key, label } = block, value = block.value.trim();
+    if (!key) { unknown.push({ label, value }); continue; }
+    if (seen.has(key)) { errors.push(`${label}: 同じ項目が複数あります。1つにしてください。`); continue; }
+    seen.add(key);
+    let parsed = value;
+    if (key === 'type') parsed = UPDATE_IMPORT_TYPES.get(updateImportTypeKey(value));
+    else if (key === 'datetime') parsed = updateImportDatetime(value);
+    else if (['price', 'quantity', 'realizedPnl'].includes(key)) {
+      if (key === 'realizedPnl' && (value === '' || value.toLowerCase() === 'null')) parsed = null;
+      else {
+        const numeric = updateImportNumber(value);
+        parsed = numeric && numeric.unit !== '%' ? numeric.number : undefined;
+        if (numeric) units[key] = numeric.unit;
+        if (key !== 'realizedPnl' && !(parsed > 0)) parsed = undefined;
+      }
+    } else if (key === 'result') parsed = ({ win: 'Win', loss: 'Loss', be: 'BE', '勝ち': 'Win', '負け': 'Loss', '建値': 'BE' })[updateImportKey(value)];
+    if (parsed === undefined) errors.push(`${label}: 形式または値を確認してください。`);
+    else fields[key] = parsed;
+  }
+  for (const [key, label] of [['type', '更新種別'], ['datetime', 'datetime（日時）'], ['price', 'price（価格）'], ['quantity', 'quantity（数量）']]) {
+    if (!Object.hasOwn(fields, key)) errors.push(`${label}が不足、または無効です。`);
+  }
+  const event = { type: fields.type, datetime: fields.datetime, price: fields.price, quantity: fields.quantity,
+    realizedPnl: fields.realizedPnl ?? null, reason: fields.reason || '',
+    memo: [fields.memo, fields.review].filter(value => value !== undefined && value !== '').join('\n'), rawText };
+  const exitUpdate = {};
+  if (fields.type === 'Final Exit') for (const key of ['review', 'reason', 'memo', 'result']) {
+    if (Object.hasOwn(fields, key)) exitUpdate[key] = fields[key];
+  }
+  if (event.realizedPnl === null) warnings.push('実現損益は未記録（null）で保存します。');
+  if (fields.result && fields.type !== 'Final Exit') warnings.push('結果は原文に保持します。Exit情報への反映はFinal Exitのみです。');
+  return { event, exitUpdate, fields, units, errors, warnings, unknown };
+}
+
+function updateImportRevision(trade) {
+  return JSON.stringify({ id: trade.id, symbol: trade.symbol, type: trade.type, date: trade.date, side: trade.side,
+    cryptoJournal: trade.cryptoJournal, legs: trade.legs, entryPrice: trade.entryPrice, quantity: trade.quantity,
+    events: trade.events, exitUpdate: trade.exitUpdate,
+    screenshots: trade.screenshots?.map(({ blob, dataUrl, ...metadata }) => metadata) });
+}
+
+function previewUpdateImport(trade, rawText) {
+  const parsed = parseUpdateImportText(rawText), errors = [...parsed.errors];
+  const before = getTradeState(trade);
+  let after = null;
+  if (!before.isValid) errors.push('現在の取引状態がInvalidです。既存履歴を確認してください。');
+  if (!errors.length) {
+    const e = parsed.event;
+    const duplicate = (trade.events || []).some(old => old.type === e.type && tradeEventTimeKey(old.datetime) === tradeEventTimeKey(e.datetime) && old.price === e.price && old.quantity === e.quantity);
+    if (duplicate) errors.push('同じtype・datetime・price・quantityのeventが登録済みです。重複追加はできません。');
+    let id = '__update_import_preview__'; while (trade.events?.some(old => old.id === id)) id += '_';
+    const candidate = withTradeEvent(trade, { ...e, id });
+    after = getTradeState(candidate);
+    if (!after.isValid) errors.push(...after.issues.map(issue => `反映後: ${issue.code}`));
+    const epsilon = Math.max(before.epsilon || 0, after.epsilon || 0);
+    if (e.type !== 'Add Entry' && e.quantity - before.remainingQuantity > epsilon) errors.push('数量が現在残数量を超えています。補正せず保存を停止します。');
+    if (e.type === 'Final Exit' && Math.abs(e.quantity - before.remainingQuantity) > epsilon) errors.push('Final Exit数量が現在残数量と一致しません。補正せず保存を停止します。');
+    const expectedRemaining = before.remainingQuantity + (e.type === 'Add Entry' ? e.quantity : -e.quantity);
+    if (Math.abs(after.remainingQuantity - expectedRemaining) > epsilon) errors.push('従来の決済情報とevents基準が一致しません。履歴を確認してください。');
+  }
+  return { ...parsed, errors: [...new Set(errors)], before, after, revision: updateImportRevision(trade), tradeId: trade.id };
+}
+
+async function commitUpdateImport({ tradeId, rawText, expectedRevision, images = [] }) {
+  if (typeof rawText !== 'string' || !rawText.trim() || typeof expectedRevision !== 'string') throw new Error('解析プレビューを確認してから保存してください。');
+  const parsed = parseUpdateImportText(rawText);
+  if (parsed.errors.length) throw new Error(parsed.errors.join('\n'));
+  return appendTradeEvent(tradeId, parsed.event, {
+    images,
+    exitUpdate: Object.keys(parsed.exitUpdate).length ? parsed.exitUpdate : undefined,
+    beforeAppend: current => {
+      const preview = previewUpdateImport(current, rawText);
+      if (preview.errors.length) throw new Error(preview.errors.join('\n'));
+      if (updateImportRevision(current) !== expectedRevision) throw new Error('プレビュー後に対象取引が変更されました。再解析して確認してください。');
+    },
+  });
+}
