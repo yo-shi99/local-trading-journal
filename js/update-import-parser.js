@@ -17,6 +17,10 @@ for (const [key, names] of Object.entries({
   realizedPnl: ['実現損益', 'Realized P&L', 'Realized PnL', 'P&L', 'PnL'],
   reason: ['理由', 'Exit理由', 'Entry理由', '利確理由', '損切り理由'],
   memo: ['メモ', 'コメント'], review: ['振り返り'], result: ['結果'],
+  exitPriceStructure: ['Exit時Price Structure'], exitFuturesCvd: ['Exit時Futures CVD'],
+  exitSpotCvd: ['Exit時Spot CVD'], exitOi: ['Exit時OI'], exitFundingRate: ['Exit時Funding Rate', 'Exit時Funding'],
+  exitVolume: ['Exit時Volume'], exitFuturesBidAskDelta: ['Exit時Futures Bid & Ask Delta'],
+  exitFootprint: ['Exit時Footprint'], exitOrderBookHeatmap: ['Exit時Order Book / Heatmap', 'Exit時Heatmap'],
 })) for (const name of names) UPDATE_IMPORT_KEYS.set(updateImportKey(name), key);
 
 function updateImportNumber(raw) {
@@ -65,6 +69,7 @@ function parseUpdateImportText(rawText) {
         if (key !== 'realizedPnl' && !(parsed > 0)) parsed = undefined;
       }
     } else if (key === 'result') parsed = ({ win: 'Win', loss: 'Loss', be: 'BE', '勝ち': 'Win', '負け': 'Loss', '建値': 'BE' })[updateImportKey(value)];
+    if (key === 'type' && updateImportTypeKey(value) === 'newentry') errors.push('New Entryは新規取引画面へ貼り付けてください。既存取引へは適用できません。');
     if (parsed === undefined) errors.push(`${label}: 形式または値を確認してください。`);
     else fields[key] = parsed;
   }
@@ -77,6 +82,11 @@ function parseUpdateImportText(rawText) {
   const exitUpdate = {};
   if (fields.type === 'Final Exit') for (const key of ['review', 'reason', 'memo', 'result']) {
     if (Object.hasOwn(fields, key)) exitUpdate[key] = fields[key];
+  }
+  const analysis = Object.fromEntries(EXIT_ANALYSIS_FIELDS.filter(([key]) => Object.hasOwn(fields, key)).map(([key]) => [key, fields[key]]));
+  if (Object.keys(analysis).length) {
+    if (fields.type === 'Final Exit') exitUpdate.analysis = analysis;
+    else warnings.push('Exit分析は原文に保持します。分析の反映はFinal Exitのみです。');
   }
   if (event.realizedPnl === null) warnings.push('実現損益は未記録（null）で保存します。');
   if (fields.result && fields.type !== 'Final Exit') warnings.push('結果は原文に保持します。Exit情報への反映はFinal Exitのみです。');

@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes.
-const CACHE_VERSION = '1.10.0';
+const CACHE_VERSION = '1.11.0';
 const APP_BASE = new URL('./', self.location.href);
 const CACHE_PREFIX = `ltj-static:${APP_BASE.pathname}:`;
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;

@@ -58,7 +58,7 @@ async function analyseUpdateImport() {
       `理由: ${e.reason}`, `メモ: ${e.memo}`];
     if (Object.keys(preview.exitUpdate).length) {
       const labels = { review: 'Exitレビュー', reason: 'Exit理由', memo: 'Exit時メモ', result: '結果' };
-      lines.push('Exit情報への反映:', ...Object.entries(preview.exitUpdate).map(([key, value]) => `${labels[key]}: ${value}`));
+      lines.push('Exit情報への反映:', ...Object.entries(preview.exitUpdate).map(([key, value]) => key === 'analysis' ? EXIT_ANALYSIS_FIELDS.filter(([k]) => Object.hasOwn(value, k)).map(([k, label]) => `${label}: ${value[k]}`).join('\n') : `${labels[key]}: ${value}`));
     }
     if (preview.after) lines.push('\n反映後:', `残数量 ${fmt(preview.before.remainingQuantity)} → ${fmt(preview.after.remainingQuantity)}`,
       `累計実現損益 ${fmt(preview.before.realizedPnl)} → ${fmt(preview.after.realizedPnl)}`, `平均建値 ${fmt(preview.after.averageEntryPrice)}`,

@@ -60,3 +60,5 @@ PWAバージョンは1.9.0。新しいJSを静的キャッシュに追加し、I
 - `JOURNAL_TEST_URL=http://127.0.0.1:8088 node tests/entry-exit.cjs`: 旧データ、分離保存、全分類画像、イベント表示、同時保存、失敗・キャンセル、モバイル表示の15項目。
 - 第1・第2段階のテスト、既存暗号資産・モバイル・画像・解析・DB安全性テストを継続。
 - PWAテストでオフラインのExitレビュー・分類付き画像保存、Entry保持、オンライン復帰を確認する。
+
+第5段階では任意の`cryptoJournal.entryAnalysis`と`exitUpdate.analysis`を追加。旧orderFlowキーは維持し、詳細仕様は[正式フォーマット](chatgpt-format.md)を参照。

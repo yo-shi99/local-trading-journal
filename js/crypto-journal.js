@@ -5,6 +5,25 @@ const CRYPTO_FLOW_FIELDS = [
   ['imbalance', 'Imbalance / Stacked Imbalance'], ['orderBook', 'Order Book / Heatmap'],
   ['marketProfile', 'TPO / Market Profile'],
 ];
+// Optional additions: legacy orderFlow keys remain the single source for existing fields.
+const ENTRY_ANALYSIS_FIELDS = [
+  ['priceStructure', 'Price Structure'], ['keyLevelZone', 'Key Level / Zone'],
+  ['futuresCvd', 'Futures CVD'], ['spotCvd', 'Spot CVD'], ['volume', 'Volume'],
+  ['futuresBidAskDelta', 'Futures Bid & Ask Delta'], ['invalidation', 'Invalidation条件'],
+];
+const EXIT_ANALYSIS_FIELDS = [
+  ['exitPriceStructure', 'Exit時Price Structure'], ['exitFuturesCvd', 'Exit時Futures CVD'],
+  ['exitSpotCvd', 'Exit時Spot CVD'], ['exitOi', 'Exit時OI'], ['exitFundingRate', 'Exit時Funding Rate'],
+  ['exitVolume', 'Exit時Volume'], ['exitFuturesBidAskDelta', 'Exit時Futures Bid & Ask Delta'],
+  ['exitFootprint', 'Exit時Footprint'], ['exitOrderBookHeatmap', 'Exit時Order Book / Heatmap'],
+];
+function validateOptionalAnalysis(analysis, fields) {
+  if (analysis === undefined) return;
+  if (!analysis || typeof analysis !== 'object' || Array.isArray(analysis) ||
+      fields.some(([key]) => analysis[key] !== undefined && typeof analysis[key] !== 'string')) {
+    throw new Error('分析項目は文字列で入力してください。');
+  }
+}
 let cryptoFormActive = false;
 let cryptoSaving = false;
 let cryptoResultManual = false;
@@ -74,8 +93,9 @@ function initCryptoFields() {
     ${cryptoInput('crypto-strategy-other', 'その他の戦略', 'text')}
     ${cryptoText('crypto-reason', 'エントリー根拠')}
     ${cryptoText('crypto-review', '振り返り（従来欄・Entry時メモ）')}
-    <details class="crypto-details"><summary>オーダーフロー・デリバティブ情報（任意）</summary>
+    <details class="crypto-details"><summary>Entry分析（任意）</summary>
       <p class="crypto-hint">数値・文章のどちらでも記録できます。</p>
+      ${ENTRY_ANALYSIS_FIELDS.map(([key, label]) => cryptoText('crypto-analysis-' + key, label)).join('')}
       ${CRYPTO_FLOW_FIELDS.map(([key, label]) => cryptoText('crypto-flow-' + key, label)).join('')}
     </details>
     <details class="crypto-details" id="crypto-legacy-options"><summary>従来の入力形式</summary>
@@ -133,11 +153,13 @@ function setupCryptoForm(t) {
     'crypto-reason': c.entryReason, 'crypto-review': c.review };
   for (const [id, value] of Object.entries(values)) document.getElementById(id).value = value ?? '';
   for (const [key] of CRYPTO_FLOW_FIELDS) document.getElementById('crypto-flow-' + key).value = c.orderFlow?.[key] ?? '';
+  for (const [key] of ENTRY_ANALYSIS_FIELDS) document.getElementById('crypto-analysis-' + key).value = c.entryAnalysis?.[key] ?? '';
   document.querySelectorAll('#crypto-fields details').forEach(details => { details.open = false; });
   document.getElementById('crypto-legacy-options').hidden = Boolean(t);
   updateCryptoChoices();
 }
 function validateCryptoJournal(c) {
+  validateOptionalAnalysis(c?.entryAnalysis, ENTRY_ANALYSIS_FIELDS);
   if (!c || c.version !== 1 || !['Long', 'Short'].includes(c.direction) ||
       !validCryptoDateTime(c.entryAt) ||
       (c.exitAt != null && c.exitAt !== '' && (!validCryptoDateTime(c.exitAt) || c.exitAt < c.entryAt)) ||
@@ -161,10 +183,15 @@ async function saveCryptoJournalTrade() {
   const button = document.querySelector('#trade-form button[onclick="saveTrade()"]');
   button.disabled = true;
   try {
+    const old = editingId ? load().find(t => t.id === editingId) : null;
+    const entryRawText = document.getElementById('crypto-analysis-text').value;
+    const textKind = classifyChatgptText(document.getElementById('crypto-analysis-text').value);
+    if (textKind.kind === 'update' || textKind.kind === 'invalid' || (textKind.explicit && editingId && entryRawText !== old?.cryptoJournal?.analysisText)) {
+      throw new Error(textKind.kind === 'update' ? '更新テキストは既存取引のUpdate Import欄へ貼り付けてください。' : 'New Entryは新規取引画面で登録してください。更新種別も確認してください。');
+    }
     const asset = selectedCryptoChoice('crypto-asset');
     const symbol = asset === 'その他' ? document.getElementById('crypto-symbol-other').value.trim().toUpperCase() : asset;
     if (!symbol) throw new Error('銘柄を入力してください。');
-    const old = editingId ? load().find(t => t.id === editingId) : null;
     const c = { ...(old?.cryptoJournal || {}), version: 1, direction: selectedCryptoChoice('crypto-direction'),
       entryAt: document.getElementById('crypto-entry-at').value, exitAt: document.getElementById('crypto-exit-at').value,
       resultMode: cryptoResultManual ? 'manual' : 'auto', entryPrice: cryptoNumber('crypto-entry-price'),
@@ -175,6 +202,8 @@ async function saveCryptoJournalTrade() {
       entryReason: document.getElementById('crypto-reason').value, review: document.getElementById('crypto-review').value,
       orderFlow: { ...(old?.cryptoJournal?.orderFlow || {}), ...Object.fromEntries(CRYPTO_FLOW_FIELDS.map(([key]) =>
         [key, document.getElementById('crypto-flow-' + key).value])) } };
+    const entryAnalysis = Object.fromEntries(ENTRY_ANALYSIS_FIELDS.map(([key]) => [key, document.getElementById('crypto-analysis-' + key).value]));
+    if (old?.cryptoJournal?.entryAnalysis !== undefined || Object.values(entryAnalysis).some(Boolean)) c.entryAnalysis = { ...old?.cryptoJournal?.entryAnalysis, ...entryAnalysis };
     validateCryptoJournal(c);
     const trade = { ...(old || {}), id: old?.id || uid(), symbol, type: old?.type || 'stock', date: c.entryAt.split('T')[0],
       screenshots: screenshotsAsBlobs(screenshotDraft),
@@ -216,7 +245,8 @@ function cryptoTradeDetails(t) {
     <p>実現損益: ${c.realizedPnl ?? '未入力'}（手入力・${cryptoRealizationDate(t) ? '決済日集計' : '決済日時または金額未登録のため集計対象外'}）</p>
     ${c.analysisText ? `<details class="crypto-details"><summary>ChatGPT解析テキスト（原文）</summary><pre class="analysis-original">${escHtml(c.analysisText)}</pre></details>` : ''}
     ${text('エントリー根拠', c.entryReason)}${text('振り返り（従来欄・Entry時メモ）', c.review)}
-    <details class="crypto-details"><summary>オーダーフロー・デリバティブ情報</summary>
+    <details class="crypto-details"><summary>Entry分析 / オーダーフロー・デリバティブ情報</summary>
+      ${ENTRY_ANALYSIS_FIELDS.map(([key, label]) => text(label, c.entryAnalysis?.[key])).join('')}
       ${CRYPTO_FLOW_FIELDS.map(([key, label]) => text(label, c.orderFlow?.[key])).join('')}
     </details></section>`;
 }

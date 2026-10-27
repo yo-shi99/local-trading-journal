@@ -61,6 +61,7 @@ async function appendTradeEvent(tradeId, input, options = {}) {
         updated = withTradeEvent(request.result, event);
         if (exitPatch) {
           updated.exitUpdate = { review: '', reason: '', memo: '', ...updated.exitUpdate, ...exitPatch };
+          if (exitPatch.analysis) updated.exitUpdate.analysis = { ...request.result.exitUpdate?.analysis, ...exitPatch.analysis };
           validateExitUpdate(updated.exitUpdate);
         }
         if (images.length) {

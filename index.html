@@ -19,7 +19,7 @@
 <header class="header">
   <div class="logo">
     <div class="logo-name">Local<span class="logo-sep"> &rsaquo; </span><span class="logo-trade">Trade</span>Journal</div>
-    <div class="logo-version" id="app-version">v1.10.0</div>
+    <div class="logo-version" id="app-version">v1.11.0</div>
   </div>
   <nav class="nav">
     <button class="nav-btn active" id="nav-cal" onclick="switchView('calendar')">カレンダー</button>
@@ -769,6 +769,7 @@
           <label class="crypto-field" for="exit-update-reason">Exit理由<textarea id="exit-update-reason" rows="3"></textarea></label>
           <label class="crypto-field" for="exit-update-memo">Exit時メモ<textarea id="exit-update-memo" rows="3"></textarea></label>
           <label class="crypto-field" for="exit-update-review">Exitレビュー<textarea id="exit-update-review" rows="3"></textarea></label>
+          <details class="crypto-details"><summary>Exit分析（Final Exit時・任意）</summary><div id="exit-analysis-fields"></div></details>
           <label class="crypto-field" for="exit-update-category">新しい更新画像の分類<select id="exit-update-category"><option value="Exit">Exit</option><option value="Update">Update</option></select></label>
           <label class="screenshot-picker">Exit / Update画像を追加<input type="file" id="exit-update-input" accept="image/*" multiple></label>
           <p id="exit-update-status" role="status"></p><div id="exit-update-draft" class="screenshot-grid"></div>

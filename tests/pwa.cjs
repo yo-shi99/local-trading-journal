@@ -123,7 +123,7 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     console.log('PASS offline reload, trade list, edit, persisted screenshot thumbnail and enlargement');
 
     await page.locator('.header-add-btn').click();
-    await page.locator('#crypto-analysis-text').fill('銘柄: ETH\n方向: Short\nEntry: 2500\nSize: 0.1');
+    await page.locator('#crypto-analysis-text').fill('更新種別: New Entry\n銘柄: ETH\n方向: Short\nEntry: 2500\nSize: 0.1\nFutures CVD: offline futures\nSpot CVD: offline spot\nVolume: offline volume\nPrice Structure: offline structure');
     await page.locator('#analysis-apply').click();
     await page.setInputFiles('#screenshot-input', { name: 'offline.png', mimeType: 'image/png', buffer: image });
     await page.waitForFunction(() => !screenshotsBusy && screenshotDraft.length === 1);
@@ -131,12 +131,30 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     await page.waitForFunction(() => load().length === 2 && document.getElementById('trade-form').style.display === 'none');
     await page.reload(); await page.waitForFunction(() => load().length === 2);
     assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').screenshots[0].blob instanceof Blob), true);
+    assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').cryptoJournal.entryAnalysis.futuresCvd), 'offline futures');
+    assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').cryptoJournal.entryAnalysis.spotCvd), 'offline spot');
+    assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').screenshots[0].category), 'Entry');
+    // Exercise the new Final Exit analysis through the existing preview/confirm UI while offline.
+    const ethId = await page.evaluate(() => load().find(t => t.symbol === 'ETH').id);
+    const ethEntry = await page.evaluate(() => structuredClone(load().find(t => t.symbol === 'ETH').cryptoJournal));
+    await page.evaluate(id => editFromTable(id), ethId);
+    const ethExitText = `更新種別: Final Exit\n決済日時: ${ethEntry.entryAt}\nExit価格: 2501\n決済数量: 0.1 ETH\n実現損益: 0\nExit時Futures CVD: offline exit futures\nExit時Spot CVD: offline exit spot\n振り返り: offline final review`;
+    await page.locator('#update-import-text').fill(ethExitText);
+    await page.locator('#update-import-analyse').click();
+    await page.waitForFunction(() => updateImportPending !== null);
+    await page.locator('#update-import-confirm').click();
+    await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'none');
+    await page.reload(); await page.waitForFunction(() => load().length === 2);
+    assert.deepEqual(await page.evaluate(() => load().find(t => t.symbol === 'ETH').cryptoJournal), ethEntry);
+    assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').exitUpdate.analysis.exitSpotCvd), 'offline exit spot');
+    assert.equal(await page.evaluate(() => getTradeState(load().find(t => t.symbol === 'ETH')).status), 'Closed');
     const downloaded = page.waitForEvent('download'); await page.evaluate(() => backupData());
     const backup = await fs.readFile(await (await downloaded).path());
     assert.equal(JSON.parse(backup).stores.trades.length, 2);
     console.log('PASS offline new trade, analysis import, new image, reload persistence and backup download');
 
     await context.setOffline(false); await page.reload(); await page.waitForFunction(() => load().length === 2);
+    assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').cryptoJournal.entryAnalysis.volume), 'offline volume');
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).events.length, id), 3);
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).events.find(e => e.type === 'Partial TP').rawText, id), updateText);
     const offlineState = await page.evaluate(id => getTradeState(load().find(t => t.id === id)), id);
@@ -150,6 +168,8 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     const restoring = page.waitForEvent('load');
     await page.setInputFiles('#restore-input', { name: 'pwa-backup.json', mimeType: 'application/json', buffer: backup });
     await restoring; await page.waitForFunction(() => load().length === 2);
+    assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').exitUpdate.analysis.exitFuturesCvd), 'offline exit futures');
+    assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').events[0].rawText), ethExitText);
     console.log('PASS online return preserves IndexedDB, original analysis and images; backup restore');
 
     await page.evaluate(() => caches.open('unrelated-cache').then(c => c.put('/unrelated', new Response('keep'))));
