@@ -6,12 +6,26 @@ const analysisEditedFields = new Set();
 function analysisImportMarkup() {
   return `<section id="analysis-import" aria-label="ChatGPT解析結果の取り込み">
     <label class="crypto-field" for="crypto-analysis-text">ChatGPT解析結果を貼り付け
-      <textarea id="crypto-analysis-text" rows="8" placeholder="銘柄: BTC&#10;方向: Short&#10;戦略: Breakout&#10;CVD: 下落&#10;エントリー根拠: レンジ下抜け＋CVD/OI確認"></textarea>
+      <textarea id="crypto-analysis-text" rows="8" placeholder="更新種別: New Entry&#10;銘柄: BTC&#10;方向: Short&#10;戦略: Breakout&#10;Futures CVD: 下落&#10;Spot CVD: 横ばい&#10;エントリー根拠: レンジ下抜け＋CVD/OI確認"></textarea>
     </label>
     <button type="button" id="analysis-apply">解析してフォームへ反映</button>
     <p class="crypto-hint">貼り付け時に自動反映します。全文はトレードと一緒に保存します。反映後も自由に修正できます。未反映の項目は原文に残ります。価格・数量などの必須項目は確認・補完してください。</p>
     <p id="analysis-status" role="status"></p>
   </section>`;
+}
+// Only an explicit, unambiguous type switches the workflow. Untyped text stays legacy Entry.
+function classifyChatgptText(text) {
+  const types = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.trim().replace(/^[-*•]\s+/, '').replace(/^\d+[.)]\s+/, '').match(/^([^:：]{1,80})[:：]\s*(.*)$/);
+    if (match && ['更新種別', 'updatetype'].includes(normalizeAnalysisKey(match[1]))) types.push(match[2].replace(/[*`]/g, '').trim());
+  }
+  if (!types.length) return { kind: 'entry', explicit: false };
+  if (types.length !== 1) return { kind: 'invalid', explicit: true };
+  const type = types[0].normalize('NFKC').toLowerCase().replace(/\s/g, '');
+  if (type === 'newentry') return { kind: 'entry', explicit: true };
+  if (['addentry', '追加エントリー', 'partialtp', '部分利確', 'partialsl', '部分損切り', 'finalexit', 'exit', '全決済', '最終決済'].includes(type)) return { kind: 'update', explicit: true };
+  return { kind: 'invalid', explicit: true };
 }
 function normalizeAnalysisKey(key) {
   return key.normalize('NFKC').toLowerCase().replace(/[\s_\-/／・&＆().（）*`]/g, '');
@@ -29,6 +43,9 @@ for (const [key, aliases] of Object.entries({
   realizedPnl: ['実現損益', '損益', 'PnL', 'P&L', 'realized pnl', 'realised pnl'],
   result: ['結果', '勝敗', 'result', 'outcome', 'Win/Loss/BE'],
   strategy: ['戦略', '戦略タグ', 'strategy', 'strategy tag'],
+  priceStructure: ['Price Structure'], keyLevelZone: ['Key Level / Zone', 'Key Level', 'Zone'],
+  futuresCvd: ['Futures CVD'], spotCvd: ['Spot CVD'], volume: ['Volume', '出来高'],
+  futuresBidAskDelta: ['Futures Bid & Ask Delta'], invalidation: ['Invalidation条件', 'Invalidation'],
   cvd: ['CVD', 'cumulative volume delta'], oi: ['OI', 'open interest', '建玉'],
   fundingRate: ['Funding', 'FR', 'Funding Rate', 'ファンディング', '資金調達率'],
   footprint: ['Footprint', 'フットプリント'],
@@ -55,6 +72,8 @@ function analysisDate(raw) {
 }
 function parseAnalysisText(text) {
   const fields = {}, warnings = [], unknown = [];
+  const classification = classifyChatgptText(text);
+  if (classification.kind !== 'entry') return { fields, warnings: [classification.kind === 'update' ? '更新テキストは既存取引のUpdate Import欄へ貼り付けてください。' : '更新種別が不明または重複しています。'], unknown, classification };
   let current = null;
   const blocks = [];
   for (const line of text.split(/\r?\n/)) {
@@ -63,6 +82,7 @@ function parseAnalysisText(text) {
     if (match) {
       const label = match[1].replace(/[*`]/g, '').trim();
       const key = ANALYSIS_ALIASES.get(normalizeAnalysisKey(label));
+      if (['更新種別', 'updatetype'].includes(normalizeAnalysisKey(label))) { current = null; continue; }
       current = key ? { key, label, value: match[2].replace(/^\*\*\s*/, '') } : null;
       if (current) blocks.push(current); else unknown.push(label);
     } else if (current && !/^```/.test(cleaned)) current.value += '\n' + line;
@@ -90,7 +110,7 @@ function parseAnalysisText(text) {
     if (Object.hasOwn(fields, key)) warnings.push(`${label}（重複・後の有効な値を採用）`);
     fields[key] = parsed;
   }
-  return { fields, warnings, unknown };
+  return { fields, warnings, unknown, classification };
 }
 function analysisOperations(fields) {
   const ops = [];
@@ -112,6 +132,7 @@ function analysisOperations(fields) {
     if (!known) input('crypto-strategy-other', fields.strategy);
   }
   for (const [key] of CRYPTO_FLOW_FIELDS) if (fields[key] !== undefined) input('crypto-flow-' + key, fields[key]);
+  for (const [key] of ENTRY_ANALYSIS_FIELDS) if (fields[key] !== undefined) input('crypto-analysis-' + key, fields[key]);
   return ops;
 }
 function applyAnalysisText() {
@@ -119,6 +140,10 @@ function applyAnalysisText() {
   const text = document.getElementById('crypto-analysis-text').value;
   const parsed = parseAnalysisText(text);
   const { fields } = parsed;
+  if (parsed.classification.kind !== 'entry' || (editingId && parsed.classification.explicit)) {
+    document.getElementById('analysis-status').textContent = parsed.classification.kind === 'entry' ? 'New Entryは新規取引画面で登録してください。既存取引には反映しません。' : parsed.warnings.join('\n');
+    return;
+  }
   // Do not introduce an invalid entry/exit pair into the existing form.
   const entry = fields.entryAt ?? document.getElementById('crypto-entry-at').value;
   const exit = fields.exitAt ?? document.getElementById('crypto-exit-at').value;

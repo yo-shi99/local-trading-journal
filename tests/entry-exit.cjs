@@ -103,7 +103,7 @@ const event = (type, quantity, i = 0, price = 80000, realizedPnl = 0) => ({ id: 
 
     await test('Exit-only UI save ignores unsaved Entry edits and preserves original analysis/events/images, including category metadata', async page => {
       const id = await create(page, true);
-      await page.evaluate(async () => { const t = structuredClone(load()[0]); t.screenshots.push({ ...t.screenshots[0], id: 'entry-classified', category: 'Entry' }); await dbPut('trades', t); await _initStorageCore(); });
+      await page.evaluate(async () => { const t = structuredClone(load()[0]); delete t.screenshots[0].category; t.screenshots.push({ ...t.screenshots[0], id: 'entry-classified', category: 'Entry' }); await dbPut('trades', t); await _initStorageCore(); });
       await attachEvents(page, [event('Partial TP', .005)]);
       const before = (await snapshot(page)).trades[0];
       await edit(page, id);

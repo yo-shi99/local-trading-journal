@@ -186,7 +186,7 @@ async function addScreenshotFiles(files) {
     for (let i = 0; i < files.length; i++) {
       if (generation !== screenshotGeneration) return;
       status.textContent = `画像を圧縮中… ${i + 1}/${files.length}`;
-      compressed.push(await compressScreenshot(files[i]));
+      compressed.push({ ...await compressScreenshot(files[i]), category: 'Entry' });
     }
     if (generation !== screenshotGeneration) return;
     validateScreenshots(compressed);

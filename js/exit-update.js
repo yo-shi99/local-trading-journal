@@ -5,6 +5,7 @@ let exitUpdateGeneration = 0;
 
 function validateExitUpdate(update) {
   if (update === undefined) return;
+  validateOptionalAnalysis(update?.analysis, EXIT_ANALYSIS_FIELDS);
   if (!update || typeof update !== 'object' || Array.isArray(update) ||
       !['review', 'reason', 'memo'].every(key => typeof update[key] === 'string') ||
       (update.result !== undefined && !['Win', 'Loss', 'BE'].includes(update.result))) {
@@ -20,6 +21,7 @@ async function saveTradeExitUpdate(tradeId, fields, images = []) {
   validateScreenshots(images);
   if (images.some(image => !['Update', 'Exit'].includes(image.category))) throw new Error('更新画像の分類はUpdateまたはExitにしてください。');
   const patch = { review: fields.review, reason: fields.reason, memo: fields.memo };
+  if (fields.analysis !== undefined) patch.analysis = structuredClone(fields.analysis);
   const additions = screenshotsAsBlobs(images);
   const db = await _openTjDb();
   const updated = await new Promise((resolve, reject) => {
@@ -31,6 +33,8 @@ async function saveTradeExitUpdate(tradeId, fields, images = []) {
       try {
         if (!request.result) throw new Error('トレードが見つかりません。');
         result = { ...request.result, exitUpdate: { ...request.result.exitUpdate, ...patch } };
+        if (patch.analysis) result.exitUpdate.analysis = { ...request.result.exitUpdate?.analysis, ...patch.analysis };
+        validateExitUpdate(result.exitUpdate);
         if (additions.length) result.screenshots = [...(request.result.screenshots || []), ...additions];
         validateScreenshots(result.screenshots);
       } catch (error) { reject(error); return; }
@@ -46,6 +50,7 @@ function resetExitUpdateDraft(trade) {
   exitScreenshotDraft = [];
   exitScreenshotsBusy = false;
   for (const key of ['review', 'reason', 'memo']) document.getElementById('exit-update-' + key).value = trade?.exitUpdate?.[key] ?? '';
+  for (const [key] of EXIT_ANALYSIS_FIELDS) document.getElementById('exit-analysis-' + key).value = trade?.exitUpdate?.analysis?.[key] ?? '';
   document.getElementById('exit-update-input').value = '';
   document.getElementById('exit-update-status').textContent = '';
   document.getElementById('exit-update-draft').innerHTML = '';
@@ -53,7 +58,11 @@ function resetExitUpdateDraft(trade) {
 }
 
 function exitUpdateFieldsFromForm() {
-  return Object.fromEntries(['review', 'reason', 'memo'].map(key => [key, document.getElementById('exit-update-' + key).value]));
+  const fields = Object.fromEntries(['review', 'reason', 'memo'].map(key => [key, document.getElementById('exit-update-' + key).value]));
+  const analysis = Object.fromEntries(EXIT_ANALYSIS_FIELDS.map(([key]) => [key, document.getElementById('exit-analysis-' + key).value]));
+  const old = editingId ? load().find(t => t.id === editingId)?.exitUpdate?.analysis : undefined;
+  if (old !== undefined || Object.values(analysis).some(Boolean)) fields.analysis = { ...old, ...analysis };
+  return fields;
 }
 
 // Normal Entry save may explicitly include this independent draft as well.
@@ -127,3 +136,6 @@ document.getElementById('exit-update-draft').addEventListener('click', event => 
     renderExitScreenshotDraft();
   }
 });
+
+// Manual correction remains available independently from Entry analysis.
+document.getElementById('exit-analysis-fields').innerHTML = EXIT_ANALYSIS_FIELDS.map(([key, label]) => cryptoText('exit-analysis-' + key, label)).join('');

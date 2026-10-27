@@ -24,6 +24,7 @@ function exitUpdateDetailsHtml(trade) {
   const update = trade.exitUpdate;
   const field = (label, text) => `<div><strong>${label}</strong><p>${escHtml(text || '')}</p></div>`;
   return `<section class="exit-update-panel" aria-label="Exit / Update情報"><h3>Exit / Update情報</h3>
+    ${trade.events?.some(event => event.type === 'Final Exit') && update.analysis ? `<details class="crypto-details"><summary>Exit分析</summary>${EXIT_ANALYSIS_FIELDS.map(([key, label]) => update.analysis[key] ? field(label, update.analysis[key]) : '').join('')}</details>` : ''}
     ${update.result ? field('結果', update.result) : ''}
     ${field('Exit理由', update.reason)}${field('Exit時メモ', update.memo)}${field('Exitレビュー', update.review)}</section>`;
 }
