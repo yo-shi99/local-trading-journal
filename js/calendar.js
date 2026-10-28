@@ -28,9 +28,7 @@ function renderCalendar() {
   const monthPrefix = `${yr}-${String(mo + 1).padStart(2,'0')}`;
   let monthlyPnl = 0, monthlyRisk = 0;
   for (const t of trades) {
-    const realizations = t.legs && t.legs.length
-      ? getRealizationsByDate(t)
-      : { [t.date]: getPnl(t) };
+    const realizations = getRealizationsByDate(t);
     const riskByDate = getRiskByDate(t);
     const realizationDates = Object.keys(realizations);
     // A trade is a full close only if all P&L lands on one date and nothing remains open
@@ -51,6 +49,7 @@ function renderCalendar() {
   // build date → count of trades taken (entered) that day but NOT closed the same day
   const takenMap = {};
   for (const t of trades) {
+    if (hasResolvedTradeState(t) && !getResolvedTradeState(t).isValid) continue;
     const firstBuy = isCryptoTrade(t) ? t.legs?.[0] : (t.legs && t.legs.length ? t.legs.find(l => l.action === 'buy') : null);
     if (!firstBuy) continue; // legacy trades have no separate entry date (open = close = t.date)
     const entryDate = firstBuy.date ? firstBuy.date.split('T')[0] : t.date;
@@ -149,9 +148,7 @@ function renderWeeklySummary() {
     const dayPnl = {};
     const tradeIds = new Set();
     for (const t of trades) {
-      const realizations = t.legs && t.legs.length
-        ? getRealizationsByDate(t)
-        : { [t.date]: getPnl(t) };
+      const realizations = getRealizationsByDate(t);
       const riskByDate = getRiskByDate(t);
       for (const [date, dp] of Object.entries(realizations)) {
         if (date >= clampedStart && date <= clampedEnd) {

@@ -85,7 +85,7 @@ const entry = { type: 'Entry', datetime: '2026-10-22T09:00', price: 10, quantity
     await test('crypto fields, original ChatGPT text and image Blob survive append, edit, JSON backup/delete/restore', async page => {
       await page.locator('.header-add-btn').click();
       const text = '銘柄: BTC\n方向: Long\nEntry: 65000\nSize: 0.01\nCVD: 元の解析\n振り返り: 元の振り返り';
-      await page.locator('#crypto-analysis-text').fill(text); await page.locator('#analysis-apply').click();
+      await page.locator('#update-import-text').fill(text); await page.locator('#update-import-analyse').click();
       const image = Buffer.from(await page.evaluate(() => {
         const c = document.createElement('canvas'); c.width = 300; c.height = 150;
         c.getContext('2d').fillRect(0, 0, 300, 150); return c.toDataURL().split(',')[1];

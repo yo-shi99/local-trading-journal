@@ -1,16 +1,18 @@
-# ChatGPT正式貼り付け仕様（第5段階 / アプリ1.11.0）
+# ChatGPT正式貼り付け仕様（アプリ1.12.0）
+
+現行の入力導線・Summary・共通集計・戻る操作は[統一ワークフロー](unified-trade-workflow.md)を参照。New Entryと既存4種類のテキスト形式は引き続き有効で、Final Summaryが追加される。
 
 スクリーンショット → ChatGPT解析 → 以下の定型テキスト → アプリへ貼り付け、を正式運用とする。
 不明な分析値を推測で埋めず空欄にする。売買の日時・約定価格・数量は利用者が確認する。項目順は自由。
 
 ## 判定と操作
 
-- `更新種別: New Entry`：新規取引の「ChatGPT解析結果を貼り付け」へ。解析でフォームに反映し、確認・補完してSave Tradeする。既存取引のUpdate Importには適用不可。
+- `更新種別: New Entry`：新規取引の「ChatGPT取引テキスト」へ。解析でフォームに反映し、プレビューを確認・補完して保存する。既存取引へは適用不可。
 - `更新種別`のない旧Entry：従来のEntry解析として扱う。既存取引の通常編集も維持。
-- Add Entry / Partial TP / Partial SL / Final Exit：対象の既存取引を開き、「ChatGPT更新テキストを貼り付け」→解析して確認→この更新を追加。
+- Add Entry / Partial TP / Partial SL / Final Exit：対象の既存取引を開き、同じ「ChatGPT取引テキスト」→解析して確認→保存。
 - 更新テキストをEntry欄へ貼ってもEntry項目には反映せず、通常保存も止める。明示的New Entryを既存Entry欄へ新たに貼っても反映・保存を止める。新形式で作成済みの取引は、保存済み原文を維持したまま通常の手動編集・再保存が可能。
 - 種別不明・種別重複は推測しない。更新種別のないテキストをUpdate Importへ適用することも不可。
-- 手入力は継続可能。Entry貼付けの従来動作（有効項目だけ反映、既入力との競合確認、無効値の警告）を維持。
+- 手入力は継続可能。Entryは有効項目だけ反映し、無効値を警告する。貼り付けただけでは処理せず、解析・プレビュー・保存を明示的に実行する。
 
 ## New Entry
 
@@ -82,6 +84,8 @@ Entry日時は分単位、ローカル時刻 `YYYY-MM-DD HH:mm`（保存はT区�
 
 既存項目は名称変更・二重保存せず既存キーを正本とする。追加7項目は任意の`entryAnalysis`に文字列で独立保存。分析の数値らしい文字列（Fundingの%など）もそのまま保持する。
 旧CVDからFutures/Spotへコピーしない。Futures/Spotを旧CVDへ統合しない。旧Entryの決済日時・実現損益・結果ラベルも従来どおり解析可能。
+
+Final Summaryの必須／任意・保存先・正式例は[簡易クローズ仕様](unified-trade-workflow.md#final-summary)を参照。
 
 ## Add Entry
 
@@ -191,7 +195,7 @@ Final Exitの理由・メモ・振り返り・結果は既存の`exitUpdate.reas
 - event・raw・Exit分析/レビュー・今回画像は同じreadwriteトランザクションの単一trade保存。失敗時は全体ロールバック。Entry情報・Entry原文・既存画像を変更しない。
 - Entry追加画像の初期categoryはEntry。更新はUpdate、Final ExitはExit。更新画像のcategoryは利用者が変更可能。categoryなし旧画像はそのまま維持。
 - DB5、store構成、バックアップv10を維持。新任意項目・原文・events・Exit情報・画像category/BlobはJSON復元まで保持。旧バックアップも継続対応。読み取りmigration・既存レコードの自動更新・DB自動削除なし。
-- PWA静的キャッシュは1.11.0へ更新。IDBデータ/BlobはSWキャッシュ対象外。更新反映は既存タブ/アプリを閉じて再起動。GitHub Pages配下URLを継続。
+- PWA静的キャッシュは1.12.0へ更新。IDBデータ/BlobはSWキャッシュ対象外。更新反映は既存タブ/アプリを閉じて再起動。GitHub Pages配下URLを継続。
 
 ## テスト
 

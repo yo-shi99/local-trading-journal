@@ -31,6 +31,7 @@ function getTradeEvents(trade) {
 
 // Also usable when constructing a new trade before its first save.
 function withTradeEvent(trade, input) {
+  if (trade.historyMode === 'summary') throw new Error('Summaryでクローズ済みの取引に売買イベントは追記できません。');
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('売買イベントを指定してください。');
   const event = { ...input, id: input.id ?? uid(), realizedPnl: input.realizedPnl ?? null,
     reason: input.reason ?? '', memo: input.memo ?? '' };

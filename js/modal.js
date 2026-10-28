@@ -27,7 +27,7 @@ function openWeek(startIso, endIso) {
 
 function refreshWeekModal() {
   const weekTrades = load().filter(t => {
-    if (isCryptoTrade(t)) return cryptoTradeDates(t).some(date => date >= activeWeekStart && date <= activeWeekEnd);
+    if (hasResolvedTradeState(t) || isCryptoTrade(t)) return getTradeActivityDates(t).some(date => date >= activeWeekStart && date <= activeWeekEnd);
     if (t.legs && t.legs.length)
       return t.legs.some(l => l.date && l.date.split('T')[0] >= activeWeekStart && l.date.split('T')[0] <= activeWeekEnd);
     return t.date >= activeWeekStart && t.date <= activeWeekEnd;
@@ -38,12 +38,12 @@ function refreshWeekModal() {
   const hiddenNote = hidden
     ? `<div class="day-hidden-note">${hidden} trade${hidden !== 1 ? 's' : ''} this week hidden by active filters</div>`
     : '';
-  const weekPnl = t => isCryptoTrade(t)
+  const weekPnl = t => isCryptoTrade(t) || hasResolvedTradeState(t)
     ? Object.entries(getRealizationsByDate(t)).reduce((sum, [date, value]) => sum + (date >= activeWeekStart && date <= activeWeekEnd ? value : 0), 0)
     : getPnl(t);
   const pnl    = trades.reduce((s, t) => s + weekPnl(t), 0);
-  const wins   = trades.filter(t => isCryptoTrade(t) ? Boolean(cryptoRealizationDate(t) >= activeWeekStart && cryptoRealizationDate(t) <= activeWeekEnd && tradeOutcome(t) === 'Win') : weekPnl(t) > 0).length;
-  const loss   = trades.filter(t => isCryptoTrade(t) ? Boolean(cryptoRealizationDate(t) >= activeWeekStart && cryptoRealizationDate(t) <= activeWeekEnd && tradeOutcome(t) === 'Loss') : weekPnl(t) < 0).length;
+  const wins   = trades.filter(t => isCryptoTrade(t) || hasResolvedTradeState(t) ? Boolean(cryptoRealizationDate(t) >= activeWeekStart && cryptoRealizationDate(t) <= activeWeekEnd && tradeOutcome(t) === 'Win') : weekPnl(t) > 0).length;
+  const loss   = trades.filter(t => isCryptoTrade(t) || hasResolvedTradeState(t) ? Boolean(cryptoRealizationDate(t) >= activeWeekStart && cryptoRealizationDate(t) <= activeWeekEnd && tradeOutcome(t) === 'Loss') : weekPnl(t) < 0).length;
   const pnlCls = pnl >= 0 ? 'pos' : 'neg';
   const risk   = trades.reduce((s, t) => s + Object.entries(getRiskByDate(t)).reduce((r, [date, v]) => r + (!isCryptoTrade(t) || (date >= activeWeekStart && date <= activeWeekEnd) ? v : 0), 0), 0);
   const pct    = risk > 0 ? (pnl / risk) * 100 : null;
@@ -51,7 +51,7 @@ function refreshWeekModal() {
   document.getElementById('day-summary').innerHTML = `
     <div class="ds-card">
       <div class="ds-label">Week P&amp;L</div>
-      <div class="ds-value ${pnlCls}">${pnl < 0 ? '-' : ''}$${Math.abs(pnl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+      <div class="ds-value ${pnlCls}">${pnl < 0 ? '-' : ''}$${trades.some(t => isCryptoTrade(t) || hasResolvedTradeState(t)) ? journalAmount(pnl, trades) : Math.abs(pnl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
       ${pct !== null ? `<div class="ds-sub ${pnlCls}" title="${RISK_BASIS_HINT}">${fmtPnlPct(pct)}</div>` : ''}
     </div>
     <div class="ds-card">
@@ -92,7 +92,9 @@ function tradeItemHtml(t, opts) {
   opts = opts || {};
   const p    = getPnl(t);
   const pCls = p >= 0 ? 'pos' : 'neg';
-  const pStr = (p < 0 ? '-$' : '$') + Math.abs(p).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const resolved = hasResolvedTradeState(t) ? getResolvedTradeState(t) : null;
+  const amount = isCryptoTrade(t) || resolved ? journalAmount(p, [t]) : Math.abs(p).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pStr = resolved && !resolved.isValid ? '—' : (p < 0 ? '-$' : '$') + amount;
   const pPct = getPnlPct(t);
   const openQty = getOpenQty(t);
   const unit    = isCryptoTrade(t) ? escHtml(t.symbol) : t.type === 'option' ? 'contract' : 'share';
@@ -134,6 +136,7 @@ function tradeItemHtml(t, opts) {
     </div>`;
   }
 
+  if (resolved && !isCryptoTrade(t)) legsHtml = resolvedTradeSummaryHtml(t);
   const badgesLine = (() => {
     const allTags     = loadTags();
     const allMistakes = loadMistakes();
@@ -171,7 +174,7 @@ function tradeItemHtml(t, opts) {
     </div>
     ${summaryHtml}
     <div class="ti-pnl-wrap">
-      <div class="ti-pnl ${pCls}">${pStr}</div>
+      <div class="ti-pnl ${pCls}">${pStr}</div>${resolved ? `<div class="ti-status">${escHtml(resolved.status)}</div>` : ''}
       ${pPct !== null ? `<div class="ti-pnl-pct ${pCls}" title="${RISK_BASIS_HINT}">${fmtPnlPct(pPct)}</div>` : ''}
       ${openHtml}
     </div>
@@ -266,7 +269,7 @@ function openDay(dateStr) {
 function refreshDayModal() {
   // Include any trade that has at least one leg on this date (multi-day trades included)
   const dayTrades = load().filter(t => {
-    if (isCryptoTrade(t)) return cryptoTradeDates(t).includes(activeDate);
+    if (hasResolvedTradeState(t) || isCryptoTrade(t)) return getTradeActivityDates(t).includes(activeDate);
     if (t.legs && t.legs.length)
       return t.legs.some(l => l.date && l.date.split('T')[0] === activeDate);
     return t.date === activeDate;
@@ -281,12 +284,10 @@ function refreshDayModal() {
   // Day P&L = only the realized P&L settled on this specific date
   let pnl = 0, wins = 0, loss = 0, risk = 0;
   for (const t of trades) {
-    const dp = t.legs && t.legs.length
-      ? (getRealizationsByDate(t)[activeDate] || 0)
-      : getPnl(t);
+    const dp = getRealizationsByDate(t)[activeDate] || 0;
     pnl += dp;
     risk += getRiskByDate(t)[activeDate] || 0;
-    if (isCryptoTrade(t)) {
+    if (isCryptoTrade(t) || hasResolvedTradeState(t)) {
       if (cryptoRealizationDate(t) === activeDate && tradeOutcome(t) === 'Win') wins++;
       if (cryptoRealizationDate(t) === activeDate && tradeOutcome(t) === 'Loss') loss++;
     } else {
@@ -300,7 +301,7 @@ function refreshDayModal() {
   document.getElementById('day-summary').innerHTML = `
     <div class="ds-card">
       <div class="ds-label">Day P&amp;L</div>
-      <div class="ds-value ${pnlCls}">${pnl < 0 ? '-' : ''}$${Math.abs(pnl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+      <div class="ds-value ${pnlCls}">${pnl < 0 ? '-' : ''}$${trades.some(t => isCryptoTrade(t) || hasResolvedTradeState(t)) ? journalAmount(pnl, trades) : Math.abs(pnl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
       ${pct !== null ? `<div class="ds-sub ${pnlCls}" title="${RISK_BASIS_HINT}">${fmtPnlPct(pct)}</div>` : ''}
     </div>
     <div class="ds-card">
@@ -707,6 +708,8 @@ function detachTradeStrategyFromForm(tradeId) {
 }
 
 function closeModal() {
+  if (hasTradeEditorNavigation()) { discardTradeEditorNavigation(); return; }
+  hideForm(); clearForm();
   resetScreenshotDraft(null);
   document.getElementById('day-overlay').classList.remove('open');
   editingId = null;
@@ -1046,6 +1049,7 @@ function updateTSPreview() {
 // ─── TRADE SUMMARY CALCULATION ───
 
 function getTradeSummary(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return { avgEntry: s.averageEntryPrice, avgExit: s.lastExitPrice, entryTime: getLegacyEntryBaseline(t)?.datetime, exitTime: s.lastExitDatetime }; }
   if (!t.legs || !t.legs.length) return {};
   const mult     = t.type === 'option' ? 100 : 1;
   const buyLegs  = t.legs.filter(l => l.action === 'buy');
@@ -1187,6 +1191,7 @@ function showForm(id) {
   document.getElementById('add-row-btn').style.display = 'none';
   const form = document.getElementById('trade-form');
   form.style.display = 'block';
+  beginTradeEditorNavigation();
 
   if (id) {
     // Place form inline directly after the trade item, keeping the summary visible
@@ -1221,8 +1226,7 @@ function hideForm() {
 }
 
 function cancelForm() {
-  hideForm();
-  clearForm();
+  discardTradeEditorNavigation();
 }
 
 function clearForm() {
@@ -1326,6 +1330,7 @@ function calcPreview() {
 
 let legacyTradeSaving = false;
 async function saveTrade() {
+  if (editingId && document.getElementById('update-import-text').value.trim()) return alert('貼付けた取引テキストは統一フォームで解析・保存してください。既存TradeへNew Entryは登録できません。');
   if (updateImportSaving || updateImportImagesBusy) return;
   if (exitUpdateSaving || exitScreenshotsBusy) return;
   if (legacyTradeSaving) return;
@@ -1381,7 +1386,7 @@ async function saveTrade() {
     trade.expiryDate  = document.getElementById('f-expiry').value;
   }
 
-  const previousId = editingId;
+  const previousId = editingId, generation = updateImportGeneration;
   trade.id = previousId || uid();
   legacyTradeSaving = true;
   const saveButton = document.querySelector('#trade-form button[onclick="saveTrade()"]');
@@ -1390,6 +1395,7 @@ async function saveTrade() {
     Object.assign(trade, applyExitUpdateDraft(trade));
     validateScreenshots(trade.screenshots);
     validateTradeEvents(trade.events);
+    validateTradeSummary(trade);
     await dbPut('trades', trade);
   } catch (error) {
     console.error('[TJ] Trade save failed:', error);
@@ -1397,6 +1403,7 @@ async function saveTrade() {
     return;
   } finally { legacyTradeSaving = false; saveButton.disabled = false; }
   _trades = previousId ? load().map(t => t.id === previousId ? trade : t) : [...load(), trade];
+  if (generation !== updateImportGeneration) { renderStats(); renderCalendar(); if (state.view === 'trades') renderTrades(); return; }
   hideForm();
   clearForm();
 
@@ -1405,6 +1412,7 @@ async function saveTrade() {
   renderStats();
   renderCalendar();
   if (state.view === 'trades') renderTrades();
+  completeTradeEditorNavigation();
 }
 
 function deleteTrade(id) {

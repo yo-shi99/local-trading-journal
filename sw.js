@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes.
-const CACHE_VERSION = '1.11.0';
+const CACHE_VERSION = '1.12.0';
 const APP_BASE = new URL('./', self.location.href);
 const CACHE_PREFIX = `ltj-static:${APP_BASE.pathname}:`;
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -17,7 +17,7 @@ const APP_FILES = [
   'js/analysis-import.js', 'js/screenshots.js', 'js/exit-update.js', 'js/update-import-parser.js', 'js/update-import-ui.js', 'js/trade-history-ui.js', 'js/wotp-helpers.js',
   'js/wotp-modal.js', 'js/llm-import.js', 'js/plan.js', 'js/calc.js',
   'js/filters.js', 'js/stats.js', 'js/calendar.js', 'js/trades.js',
-  'js/modal.js', 'js/reports.js', 'js/bulk.js', 'js/llm-prompts.js',
+  'js/modal.js', 'js/form-navigation.js', 'js/reports.js', 'js/bulk.js', 'js/llm-prompts.js',
   'js/banking.js', 'js/signal-intel.js', 'js/llm-trade-plan.js',
   'js/app.js', 'js/pwa.js',
 ];

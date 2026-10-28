@@ -69,7 +69,7 @@ const events = [
     await test('crypto Long/Short retain original fields, original text and image Blob; event result is direction independent', async page => {
       await page.locator('.header-add-btn').click();
       const analysis = '銘柄: BTC\n方向: Short\nEntry: 65000\nSize: 0.01\nCVD: 元の解析原文';
-      await page.locator('#crypto-analysis-text').fill(analysis); await page.locator('#analysis-apply').click();
+      await page.locator('#update-import-text').fill(analysis); await page.locator('#update-import-analyse').click();
       await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
       await page.waitForFunction(() => load().length === 1 && document.getElementById('trade-form').style.display === 'none');
       await page.evaluate(() => closeModal());

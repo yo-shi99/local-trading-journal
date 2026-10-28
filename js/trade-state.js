@@ -110,8 +110,9 @@ function getLegacyEntryBaseline(trade) {
   return { price, quantity, datetime, source };
 }
 
-// Detail/read API: legacy aggregate APIs and saved fields remain unchanged.
+// Read-only position calculation; no values are copied back to legacy fields.
 function getTradeState(trade) {
+  if (trade.historyMode === 'summary') return resolveSummaryTradeState(trade);
   if (hasTradeEventHistory(trade)) {
     const state = calculateEventTradeState(trade.events);
     if (state.issues.some(issue => issue.code === 'INVALID_EVENTS') || trade.events.some(event => event.type === 'Entry')) return state;
@@ -142,4 +143,67 @@ function getTradeState(trade) {
       Number.isFinite(legacyExitPrice) ? legacyExitPrice : null,
     addEntryCount: null, partialTpCount: null, partialSlCount: null,
     realizedPnlEventCount: null, missingRealizedPnlCount: null, epsilon: 0 };
+}
+
+// Summary and event states never fall back to stale Entry/Exit fields, even when invalid.
+function hasResolvedTradeState(trade) {
+  return (trade.historyMode !== undefined && trade.historyMode !== 'full') || trade.finalSummary !== undefined || hasTradeEventHistory(trade);
+}
+function validateTradeSummary(trade) {
+  if (trade.historyMode === undefined && trade.finalSummary === undefined) return;
+  if (trade.historyMode === 'full' && trade.finalSummary === undefined) return;
+  const s = trade.finalSummary;
+  if (trade.historyMode !== 'summary' || !s || typeof s !== 'object' || Array.isArray(s) ||
+      !validTradeEventDateTime(s.datetime) || !Number.isFinite(s.realizedPnl) ||
+      !['Win', 'Loss', 'BE'].includes(s.result) ||
+      !(s.price === null || (Number.isFinite(s.price) && s.price > 0)) || typeof s.rawText !== 'string') {
+    throw new Error('Final Summaryの日時・実現損益・結果・原文を確認してください。');
+  }
+}
+function resolveSummaryTradeState(trade) {
+  const state = { source: 'summary', historyMode: 'summary', isValid: true, issues: [],
+    status: 'Closed', totalEntryQuantity: null, averageEntryPrice: null, closedQuantity: null,
+    remainingQuantity: 0, rawRemainingQuantity: 0, realizedPnl: null, result: '',
+    lastExitDatetime: null, lastExitPrice: null, addEntryCount: null, partialTpCount: null,
+    partialSlCount: null, realizedPnlEventCount: null, missingRealizedPnlCount: null, epsilon: 0 };
+  try { validateTradeSummary(trade); }
+  catch (error) { return { ...state, isValid: false, status: 'Invalid', remainingQuantity: null,
+    issues: [{ code: 'INVALID_SUMMARY', message: error.message }] }; }
+  const s = trade.finalSummary;
+  return { ...state, realizedPnl: s.realizedPnl, result: s.result,
+    lastExitDatetime: s.datetime, lastExitPrice: s.price };
+}
+function getResolvedTradeState(trade) {
+  try { validateTradeSummary(trade); }
+  catch (error) { return { source: 'invalid', isValid: false, status: 'Invalid', issues: [{ code: 'INVALID_SUMMARY', message: error.message }],
+    totalEntryQuantity: null, averageEntryPrice: null, closedQuantity: null, remainingQuantity: null,
+    realizedPnl: null, lastExitDatetime: null, lastExitPrice: null, result: '', epsilon: 0 }; }
+  const s = getTradeState(trade);
+  if (s.source === 'summary') return s;
+  const result = s.source === 'events'
+    ? s.isValid && s.status === 'Closed'
+      ? trade.exitUpdate?.result || (s.realizedPnlEventCount ? s.realizedPnl > 0 ? 'Win' : s.realizedPnl < 0 ? 'Loss' : 'BE' : '') : ''
+    : isCryptoTrade(trade) ? (cryptoRealizationDate(trade) ? trade.cryptoJournal.result : '')
+      : s.realizedPnl > 0 ? 'Win' : s.realizedPnl < 0 ? 'Loss' : 'BE';
+  return { ...s, historyMode: s.source === 'events' ? 'full' : 'legacy', result };
+}
+function getResolvedRealizations(trade) {
+  const s = getResolvedTradeState(trade);
+  if (!s.isValid) return {};
+  if (s.source === 'summary') return { [s.lastExitDatetime.split('T')[0]]: s.realizedPnl };
+  const dates = {};
+  for (const event of trade.events || []) {
+    if (['Partial TP', 'Partial SL', 'Final Exit'].includes(event.type) && event.realizedPnl !== null) {
+      const date = event.datetime.split('T')[0];
+      (dates[date] ||= []).push(event.realizedPnl);
+    }
+  }
+  return Object.fromEntries(Object.entries(dates).map(([date, values]) => [date, eventStateSum(values)]));
+}
+function getTradeActivityDates(trade) {
+  if (!hasResolvedTradeState(trade)) return isCryptoTrade(trade) ? cryptoTradeDates(trade) :
+    [...new Set([trade.date, ...(trade.legs || []).map(leg => leg.date?.split('T')[0])].filter(Boolean))];
+  const s = getResolvedTradeState(trade);
+  return [...new Set([trade.date, ...(Array.isArray(trade.events) ? trade.events : []).map(event => event?.datetime?.split('T')[0]),
+    s.lastExitDatetime?.split('T')[0]].filter(Boolean))];
 }

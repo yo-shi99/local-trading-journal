@@ -86,7 +86,7 @@ function renderReportContent() {
   if (!el) return;
 
   try {
-    var trades = applyGlobalFilter(load());
+    var trades = applyGlobalFilter(load()).filter(t => !hasResolvedTradeState(t) || getResolvedTradeState(t).isValid);
 
     if (activeReportType === 'risk') {
       renderReportRisk(trades, el);
@@ -132,23 +132,11 @@ function fmtRptPnl(v) {
 }
 
 function buildRptGroupStats(trades) {
-  var pnl = 0, wins = 0, losses = 0, grossWin = 0, grossLoss = 0;
-  for (var i = 0; i < trades.length; i++) {
-    var p = 0;
-    try { p = getPnl(trades[i]) || 0; } catch (e) { p = 0; }
-    if (!isFinite(p)) p = 0;
-    pnl += p;
-    if (p > 0) { wins++;   grossWin  += p; }
-    if (p < 0) { losses++; grossLoss += Math.abs(p); }
-  }
-  pnl = Math.round(pnl * 100) / 100;
-  var total   = trades.length;
-  var winRate = total ? parseFloat((wins / total * 100).toFixed(1)) : 0;
-  var avgWin  = wins   ? Math.round(grossWin  / wins   * 100) / 100 : null;
-  var avgLoss = losses ? Math.round(grossLoss / losses * 100) / 100 : null;
-  var avgPnl  = total  ? Math.round(pnl / total * 100) / 100 : 0;
-  return { total: total, wins: wins, losses: losses, pnl: pnl,
-           winRate: winRate, avgWin: avgWin, avgLoss: avgLoss, avgPnl: avgPnl };
+  const s = computeStats(trades);
+  return { total: s.total, wins: s.wins, losses: s.losses, pnl: s.totalPnl,
+    winRate: Number(s.winRate), avgWin: s.avgWinValue, avgLoss: s.avgLossValue,
+    avgPnl: s.total ? s.totalPnl / s.total : 0, grossWin: s.grossWin, grossLoss: s.grossLoss,
+    classifiedCount: s.classifiedCount, positivePnlCount: s.positivePnlCount, negativePnlCount: s.negativePnlCount, pf: s.pf };
 }
 
 function renderRptCards(cards) {
@@ -165,27 +153,24 @@ function renderRptCards(cards) {
   return html;
 }
 
-// Buckets are always disjoint, so gross win/loss can be reconstructed from the
-// per-bucket averages instead of re-walking every trade.
+// Preserve monetary totals independently of qualitative Win/Loss/BE labels.
 function sumRptGroupStats(statsArr) {
-  var total = 0, wins = 0, losses = 0, pnl = 0, grossWin = 0, grossLoss = 0;
-  for (var i = 0; i < statsArr.length; i++) {
-    var s = statsArr[i];
-    total  += s.total;
-    wins   += s.wins;
-    losses += s.losses;
-    pnl    += s.pnl;
-    if (s.avgWin  !== null) grossWin  += s.avgWin  * s.wins;
-    if (s.avgLoss !== null) grossLoss += s.avgLoss * s.losses;
-  }
-  pnl = Math.round(pnl * 100) / 100;
-  return {
-    total: total, wins: wins, losses: losses, pnl: pnl,
-    winRate: total ? parseFloat((wins / total * 100).toFixed(1)) : 0,
-    avgWin:  wins   ? Math.round(grossWin  / wins   * 100) / 100 : null,
-    avgLoss: losses ? Math.round(grossLoss / losses * 100) / 100 : null,
-    avgPnl:  total  ? Math.round(pnl / total * 100) / 100 : 0,
-  };
+  const total = statsArr.reduce((sum, s) => sum + s.total, 0);
+  const wins = statsArr.reduce((sum, s) => sum + s.wins, 0);
+  const losses = statsArr.reduce((sum, s) => sum + s.losses, 0);
+  const classified = statsArr.reduce((sum, s) => sum + (s.classifiedCount ?? s.total), 0);
+  const positiveCount = statsArr.reduce((sum, s) => sum + (s.positivePnlCount ?? s.wins), 0);
+  const negativeCount = statsArr.reduce((sum, s) => sum + (s.negativePnlCount ?? s.losses), 0);
+  const pnl = eventStateSum(statsArr.map(s => s.pnl));
+  const grossWin = eventStateSum(statsArr.map(s => s.grossWin ?? (s.avgWin === null ? 0 : s.avgWin * s.wins)));
+  const grossLoss = eventStateSum(statsArr.map(s => s.grossLoss ?? (s.avgLoss === null ? 0 : s.avgLoss * s.losses)));
+  return { total, wins, losses, pnl, grossWin, grossLoss,
+    classifiedCount: classified, positivePnlCount: positiveCount, negativePnlCount: negativeCount,
+    winRate: classified ? Number((wins / classified * 100).toFixed(1)) : 0,
+    avgWin: positiveCount ? grossWin / positiveCount : null,
+    avgLoss: negativeCount ? grossLoss / negativeCount : null,
+    avgPnl: total ? pnl / total : 0,
+    pf: grossLoss > 0 ? (grossWin / grossLoss).toFixed(2) : grossWin > 0 ? '∞' : '—' };
 }
 
 function renderRptTable(firstHeader, labels, statsArr) {
@@ -331,6 +316,7 @@ var RPT_DUR_BUCKETS = [
 ];
 
 function rptGetDurationMins(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t), entry = getLegacyEntryBaseline(t)?.datetime; return s.isValid && s.status === 'Closed' && entry && s.lastExitDatetime ? Math.max(0, (new Date(s.lastExitDatetime) - new Date(entry)) / 60000) : null; }
   if (!t.legs || !t.legs.length) return null;
   var buyTs = [], sellTs = [];
   for (var i = 0; i < t.legs.length; i++) {
@@ -381,6 +367,7 @@ var RPT_R_BUCKETS = [
 ];
 
 function rptGetRealizedR(t) {
+  if (hasResolvedTradeState(t)) { const pct = getPnlPct(t); return pct === null ? null : pct / 100; }
   if (!t.legs || !t.legs.length) return null;
   if (!t.stopLoss || !t.stopLoss.length) return null;
   var mult = t.type === 'option' ? 100 : 1;
@@ -461,6 +448,7 @@ var RPT_VOLUME_BUCKETS = [
 ];
 
 function rptGetPositionSize(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return s.isValid && s.averageEntryPrice !== null && s.totalEntryQuantity !== null ? s.averageEntryPrice * s.totalEntryQuantity * (t.type === 'option' ? 100 : 1) : null; }
   if (!t.legs || !t.legs.length) return null;
   var mult    = t.type === 'option' ? 100 : 1;
   var buyLegs = t.legs.filter(function(l) { return l.action === 'buy'; });
@@ -474,6 +462,7 @@ function rptGetPositionSize(t) {
 }
 
 function rptGetVolume(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return s.isValid ? s.totalEntryQuantity : null; }
   if (!t.legs || !t.legs.length) {
     var qty = parseFloat(t.quantity);
     return isNaN(qty) ? null : qty;
@@ -494,6 +483,7 @@ function rptMatchBucket(value, buckets) {
 var RPT_DOW_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
 function rptTradeDateKey(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return s.lastExitDatetime?.split('T')[0] || t.date || ''; }
   return (t.date || '').split('T')[0];
 }
 
@@ -746,6 +736,7 @@ var RPT_PRICE_BUCKETS = [
 ];
 
 function rptGetAvgEntryPrice(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return s.isValid ? s.averageEntryPrice : null; }
   if (t.legs && t.legs.length) {
     var buyLegs = t.legs.filter(function(l) { return l.action === 'buy'; });
     if (!buyLegs.length) return parseFloat(t.entryPrice) || null;
@@ -1066,6 +1057,7 @@ function rptGetTradeSide(t) {
 }
 
 function rptGetPlannedR(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t), risk = getTradeRisk(t), tp = t.cryptoJournal?.takeProfitPrice; return s.isValid && risk && Number.isFinite(tp) && s.averageEntryPrice !== null ? (tp - s.averageEntryPrice) * (t.cryptoJournal.direction === 'Short' ? -1 : 1) * s.totalEntryQuantity / risk : null; }
   if (!t.legs || !t.legs.length) return null;
   if (!t.stopLoss || !t.stopLoss.length) return null;
   if (!t.profitTargets || !t.profitTargets.length) return null;

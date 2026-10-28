@@ -64,6 +64,7 @@ function _buildPaginationHTML(total, totalPages) {
 }
 
 function legsSummary(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return `${escHtml(s.status)} · ${s.remainingQuantity ?? '—'} remaining`; }
   if (!t.legs || !t.legs.length) {
     // Legacy
     return `<span class="badge b-${t.side}">${t.side === 'long' ? 'Long' : 'Short'}</span>
@@ -116,7 +117,8 @@ function renderTrades() {
   tbody.innerHTML = trades.map((t, i) => {
     const pnl    = getPnl(t);
     const pnlCls = pnl >= 0 ? 'pos' : 'neg';
-    const pnlStr = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+    const resolved = hasResolvedTradeState(t) ? getResolvedTradeState(t) : null;
+    const pnlStr = resolved && !resolved.isValid ? '—' : (pnl >= 0 ? '+$' : '-$') + (isCryptoTrade(t) || resolved ? journalAmount(pnl, [t]) : Math.abs(pnl).toFixed(2));
     const pnlPct = getPnlPct(t);
     const [y, m, d] = t.date.split('-');
     const dateStr = `${m}/${d}/${y}`;
@@ -157,7 +159,7 @@ function renderTrades() {
     return `<tr>
       <td class="col-rownum-cell">${pageOffset + i + 1}</td>
       <td>${dateStr}</td>
-      <td><div><strong>${escHtml(t.symbol)}</strong></div>${stratPill}${cryptoTradeSummary(t)}</td>
+      <td><div><strong>${escHtml(t.symbol)}</strong></div>${stratPill}${cryptoTradeSummary(t)}${!isCryptoTrade(t) && resolved ? resolvedTradeSummaryHtml(t) : ''}</td>
       <td>${sideLabel}</td>
       <td>${typeLbl}</td>
       <td>${legsSummary(t)}</td>

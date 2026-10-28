@@ -1,5 +1,7 @@
 # Entry / Exit分離とlegacy baseline（第3段階）
 
+> 現行1.12.0では[統一ワークフロー](unified-trade-workflow.md)が入力導線・表示集計・Summary・navigationの仕様を更新しています。以下は各段階の保存／計算基盤の記録です。
+
 第4段階の更新テキスト取り込みは [Update Import](update-import.md) を参照。以下は第3段階の分離・保護方針。
 
 ## 保存構造と互換性

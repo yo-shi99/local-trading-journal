@@ -230,6 +230,8 @@ const fs = require('node:fs/promises');
       await page.locator('.screenshot-remove').click();
       await page.waitForFunction(url => urlAudit.revoked.includes(url), editUrl);
       await page.evaluate(() => closeModal());
+      // Close returns from the editor to its detail; close the detail to retire its URLs.
+      await page.evaluate(() => closeModal());
       await page.waitForFunction(() => screenshotUrls.size === 0);
       assert.equal(await page.evaluate(() => urlAudit.created.every(url => urlAudit.revoked.includes(url))), true);
     });

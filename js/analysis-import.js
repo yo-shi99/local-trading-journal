@@ -4,14 +4,10 @@ let analysisApplied = false;
 let analysisPasteTicket = 0;
 const analysisEditedFields = new Set();
 function analysisImportMarkup() {
-  return `<section id="analysis-import" aria-label="ChatGPT解析結果の取り込み">
-    <label class="crypto-field" for="crypto-analysis-text">ChatGPT解析結果を貼り付け
-      <textarea id="crypto-analysis-text" rows="8" placeholder="更新種別: New Entry&#10;銘柄: BTC&#10;方向: Short&#10;戦略: Breakout&#10;Futures CVD: 下落&#10;Spot CVD: 横ばい&#10;エントリー根拠: レンジ下抜け＋CVD/OI確認"></textarea>
-    </label>
-    <button type="button" id="analysis-apply">解析してフォームへ反映</button>
-    <p class="crypto-hint">貼り付け時に自動反映します。全文はトレードと一緒に保存します。反映後も自由に修正できます。未反映の項目は原文に残ります。価格・数量などの必須項目は確認・補完してください。</p>
-    <p id="analysis-status" role="status"></p>
-  </section>`;
+  return `<div id="analysis-import" hidden aria-hidden="true">
+    <textarea id="crypto-analysis-text" hidden></textarea>
+    <button type="button" id="analysis-apply" hidden>Entry解析（内部互換）</button><p id="analysis-status"></p>
+  </div>`;
 }
 // Only an explicit, unambiguous type switches the workflow. Untyped text stays legacy Entry.
 function classifyChatgptText(text) {
@@ -24,7 +20,7 @@ function classifyChatgptText(text) {
   if (types.length !== 1) return { kind: 'invalid', explicit: true };
   const type = types[0].normalize('NFKC').toLowerCase().replace(/\s/g, '');
   if (type === 'newentry') return { kind: 'entry', explicit: true };
-  if (['addentry', '追加エントリー', 'partialtp', '部分利確', 'partialsl', '部分損切り', 'finalexit', 'exit', '全決済', '最終決済'].includes(type)) return { kind: 'update', explicit: true };
+  if (['addentry', '追加エントリー', 'partialtp', '部分利確', 'partialsl', '部分損切り', 'finalexit', 'exit', '全決済', '最終決済', 'finalsummary'].includes(type)) return { kind: 'update', explicit: true };
   return { kind: 'invalid', explicit: true };
 }
 function normalizeAnalysisKey(key) {
@@ -135,7 +131,7 @@ function analysisOperations(fields) {
   for (const [key] of ENTRY_ANALYSIS_FIELDS) if (fields[key] !== undefined) input('crypto-analysis-' + key, fields[key]);
   return ops;
 }
-function applyAnalysisText() {
+function applyAnalysisText(options = {}) {
   if (!cryptoFormActive || cryptoSaving) return;
   const text = document.getElementById('crypto-analysis-text').value;
   const parsed = parseAnalysisText(text);
@@ -157,7 +153,7 @@ function applyAnalysisText() {
   }
   const operations = analysisOperations(fields);
   const conflicts = operations.filter(op => op.old !== '' && op.old !== op.value && (editingId || analysisApplied || analysisEditedFields.has(op.key)));
-  if (conflicts.length && !confirm('解析結果で入力済みの項目を上書きしますか？認識した項目だけを反映します。元の解析テキストは残ります。')) {
+  if (conflicts.length && options.confirmOverwrite !== false && !confirm('解析結果で入力済みの項目を上書きしますか？認識した項目だけを反映します。元の解析テキストは残ります。')) {
     document.getElementById('analysis-status').textContent = '反映をキャンセルしました。各項目は変更していません。原文は保存対象に残ります。';
     return;
   }

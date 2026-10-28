@@ -57,11 +57,13 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
 
     await page.locator('.header-add-btn').click();
     const analysis = '銘柄: BTC\n方向: Long\nエントリー価格: 65000\nポジションサイズ: 0.01\n戦略: SFP\nCVD: 上昇';
-    await page.locator('#crypto-analysis-text').evaluate((el, text) => {
+    await page.waitForSelector('#update-import-text', { state: 'visible' });
+    await page.locator('#update-import-text').evaluate((el, text) => {
       const data = new DataTransfer(); data.setData('text/plain', text);
       el.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData: data }));
       el.value = text; el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste' }));
     }, analysis);
+    await page.locator('#update-import-analyse').click();
     await page.waitForFunction(() => document.getElementById('crypto-entry-price').value === '65000');
     const image = Buffer.from(await page.evaluate(() => {
       const c = document.createElement('canvas'); c.width = 2000; c.height = 1000;
@@ -123,8 +125,8 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     console.log('PASS offline reload, trade list, edit, persisted screenshot thumbnail and enlargement');
 
     await page.locator('.header-add-btn').click();
-    await page.locator('#crypto-analysis-text').fill('更新種別: New Entry\n銘柄: ETH\n方向: Short\nEntry: 2500\nSize: 0.1\nFutures CVD: offline futures\nSpot CVD: offline spot\nVolume: offline volume\nPrice Structure: offline structure');
-    await page.locator('#analysis-apply').click();
+    await page.locator('#update-import-text').fill('更新種別: New Entry\n銘柄: ETH\n方向: Short\nEntry: 2500\nSize: 0.1\nFutures CVD: offline futures\nSpot CVD: offline spot\nVolume: offline volume\nPrice Structure: offline structure');
+    await page.locator('#update-import-analyse').click();
     await page.setInputFiles('#screenshot-input', { name: 'offline.png', mimeType: 'image/png', buffer: image });
     await page.waitForFunction(() => !screenshotsBusy && screenshotDraft.length === 1);
     await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
@@ -148,6 +150,19 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     assert.deepEqual(await page.evaluate(() => load().find(t => t.symbol === 'ETH').cryptoJournal), ethEntry);
     assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').exitUpdate.analysis.exitSpotCvd), 'offline exit spot');
     assert.equal(await page.evaluate(() => getTradeState(load().find(t => t.symbol === 'ETH')).status), 'Closed');
+    const priorFullState = await page.evaluate(id => getResolvedTradeState(load().find(t => t.id === id)), id);
+    assert.ok(Math.abs(priorFullState.remainingQuantity - .014) < 1e-12);
+    assert.ok(Math.abs(priorFullState.averageEntryPrice - 64666.666666666664) < 1e-8);
+    await page.evaluate(id => editFromTable(id), id);
+    await page.waitForFunction(() => editingId !== null && document.getElementById('trade-form').style.display === 'block');
+    const summaryText = '更新種別: Final Summary\n決済日時: 2026-10-22 12:01:04\n実現損益: 25.5 USDT\n結果: Win';
+    await page.locator('#update-import-text').fill(summaryText);
+    await page.locator('#update-import-analyse').click();
+    await page.waitForFunction(() => updateImportPending !== null);
+    await page.locator('#update-import-confirm').click();
+    await page.waitForFunction(() => load().some(t => t.historyMode === 'summary') && document.getElementById('trade-form').style.display === 'none');
+    await page.reload(); await page.waitForFunction(() => load().length === 2);
+    assert.equal(await page.evaluate(id => load().find(t => t.id === id).finalSummary.rawText, id), summaryText);
     const downloaded = page.waitForEvent('download'); await page.evaluate(() => backupData());
     const backup = await fs.readFile(await (await downloaded).path());
     assert.equal(JSON.parse(backup).stores.trades.length, 2);
@@ -161,8 +176,11 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).exitUpdate.review, id), 'offline Exit review');
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).screenshots.some(image => image.category === 'Exit' && image.blob instanceof Blob), id), true);
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).screenshots.some(image => image.category === 'Update' && image.blob instanceof Blob), id), true);
-    assert.ok(Math.abs(offlineState.remainingQuantity - 0.014) < 1e-12);
-    assert.ok(Math.abs(offlineState.averageEntryPrice - 64666.666666666664) < 1e-8);
+    assert.equal(offlineState.status, 'Closed');
+    assert.equal(offlineState.source, 'summary');
+    assert.equal(offlineState.remainingQuantity, 0);
+    assert.equal(offlineState.averageEntryPrice, null);
+    assert.equal(offlineState.realizedPnl, 25.5);
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).cryptoJournal.review, id), 'オフラインで編集');
     assert.equal(await page.evaluate(id => load().find(t => t.id === id).cryptoJournal.analysisText, id), analysis);
     const restoring = page.waitForEvent('load');

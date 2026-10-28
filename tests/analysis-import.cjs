@@ -37,14 +37,15 @@ TPO / Market Profile: Poor Lowあり
     try {
       await page.goto(base); await page.waitForSelector('.day-cell');
       await page.locator('.header-add-btn').click();
+      await page.waitForSelector('#update-import-text', { state: 'visible' });
       await fn(page, dialogs, accept);
       assert.deepEqual(errors, []); assert.deepEqual(external, []);
       console.log('PASS', name); passed++;
     } finally { await context.close(); }
   }
   async function apply(page, text) {
-    await page.locator('#crypto-analysis-text').fill(text);
-    await page.locator('#analysis-apply').click();
+    await page.locator('#update-import-text').fill(text);
+    await page.locator('#update-import-analyse').click();
   }
   async function save(page) {
     await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
@@ -130,25 +131,29 @@ TPO / Market Profile: Poor Lowあり
       assert.ok((await page.locator('#analysis-status').innerText()).includes('重複'));
       await save(page);
     });
-    await test('overwrite confirmation can cancel while preserving the raw text', async (page, dialogs, accept) => {
+    await test('Cancel discards the draft; reopened New Entry supports reviewed manual correction', async page => {
       await apply(page, 'Entry: 100\nSize: 1');
-      await page.locator('#crypto-entry-price').fill('105');
-      page.off('dialog', accept); page.once('dialog', d => d.dismiss());
       await apply(page, 'Entry: 200\nCVD: 下落');
-      assert.equal(await page.locator('#crypto-entry-price').inputValue(), '105');
-      assert.equal(await page.locator('#crypto-flow-cvd').inputValue(), '');
-      assert.equal(await page.locator('#crypto-analysis-text').inputValue(), 'Entry: 200\nCVD: 下落');
-      page.on('dialog', accept); await save(page);
+      assert.equal(await page.locator('#crypto-entry-price').inputValue(), '200');
+      await page.locator('#update-import-cancel').click();
+      assert.equal(await page.evaluate(() => load().length), 0);
+      assert.equal(await page.locator('#update-import-text').inputValue(), '');
+      await page.locator('.header-add-btn').click();
+      await apply(page, 'Entry: 200\nSize: 1\nCVD: 下落');
+      await page.locator('#crypto-entry-price').fill('105');
+      await page.locator('#update-import-analyse').click(); await save(page);
       assert.equal(await page.evaluate(() => load()[0].cryptoJournal.entryPrice), 105);
-      assert.equal(await page.evaluate(() => load()[0].cryptoJournal.analysisText), 'Entry: 200\nCVD: 下落');
+      assert.equal(await page.evaluate(() => load()[0].cryptoJournal.analysisText), 'Entry: 200\nSize: 1\nCVD: 下落');
     });
-    await test('paste event automatically applies locally; unknown strategy/symbol and zero PnL survive', async page => {
+    await test('paste waits for explicit analysis locally; unknown strategy/symbol and zero PnL survive', async page => {
       const text = '銘柄: XRP\n売買方向: Short\nEntry: 0.5\nSize: 100\nPnL: 0\n結果: Win\n戦略: 独自の反転\nOrder Book Heatmap: 下のBidが薄い';
-      await page.locator('#crypto-analysis-text').evaluate((element, text) => {
+      await page.locator('#update-import-text').evaluate((element, text) => {
         const data = new DataTransfer(); data.setData('text/plain', text);
         element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData: data }));
         element.value = text; element.dispatchEvent(new Event('input', { bubbles: true }));
       }, text);
+      assert.equal(await page.locator('#crypto-entry-price').inputValue(), '');
+      await page.locator('#update-import-analyse').click();
       await page.waitForFunction(() => document.getElementById('crypto-entry-price').value === '0.5');
       assert.equal(await page.locator('#crypto-symbol-other').inputValue(), 'XRP');
       assert.equal(await page.locator('#crypto-strategy-other').inputValue(), '独自の反転');
@@ -170,8 +175,8 @@ TPO / Market Profile: Poor Lowあり
       await test(`paste UI fits ${width}px and has large controls`, async page => {
         await page.setViewportSize({ width, height: 844 }); await apply(page, full);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        const button = await page.locator('#analysis-apply').boundingBox(); assert.ok(button.height >= 48);
-        const textarea = await page.locator('#crypto-analysis-text').boundingBox(); assert.ok(textarea.height >= 210);
+        const button = await page.locator('#update-import-analyse').boundingBox(); assert.ok(button.height >= 48);
+        const textarea = await page.locator('#update-import-text').boundingBox(); assert.ok(textarea.height >= 210);
       });
     }
     console.log(`${passed} tests passed`);

@@ -166,3 +166,7 @@ body.journal-simple :focus-visible { outline: 2px solid var(--accent); outline-o
 #update-import-category, #update-import-analyse { min-height: 48px; font: inherit; }
 .update-import-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 #update-import .update-import-actions button { min-height: 48px; white-space: normal; }
+
+#exit-update-editor > summary { cursor: pointer; min-height: 44px; padding: 12px 0; font-weight: 600; }
+#update-import-preview { max-width: 100%; }
+.resolved-trade-summary { border-left: 3px solid var(--accent); padding-left: 10px; }
