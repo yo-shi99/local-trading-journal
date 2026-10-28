@@ -31,18 +31,21 @@ function isCryptoTrade(t) { return t?.cryptoJournal?.version === 1; }
 // A zero amount does not imply the trader's qualitative BE classification.
 function cryptoOutcome(pnl) { return pnl === null || pnl === 0 ? '' : pnl > 0 ? 'Win' : 'Loss'; }
 function cryptoRealizationDate(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return s.isValid && s.status === 'Closed' ? s.lastExitDatetime?.split('T')[0] || null : null; }
   const c = t.cryptoJournal;
   return c?.exitAt && Number.isFinite(c.realizedPnl) ? c.exitAt.split('T')[0] : null;
 }
 function journalAmount(value, trades) {
-  return trades.some(isCryptoTrade) ? Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 }) : Math.round(Math.abs(value)).toLocaleString('en-US');
+  return trades.some(t => isCryptoTrade(t) || hasResolvedTradeState(t)) ? Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 }) : Math.round(Math.abs(value)).toLocaleString('en-US');
 }
 function tradeOutcome(t) {
+  if (hasResolvedTradeState(t)) return getResolvedTradeState(t).result;
   if (isCryptoTrade(t)) return cryptoRealizationDate(t) ? t.cryptoJournal.result : '';
   const pnl = getPnl(t);
   return pnl > 0 ? 'Win' : pnl < 0 ? 'Loss' : 'BE';
 }
 function cryptoTradeDates(t) {
+  if (hasResolvedTradeState(t)) return getTradeActivityDates(t);
   return [t.date, t.cryptoJournal?.exitAt?.split('T')[0]].filter(Boolean);
 }
 function validCryptoDateTime(value) {
@@ -175,16 +178,18 @@ function validateCryptoJournal(c) {
   }
   if (c.strategy === 'その他' && !c.strategyOther.trim()) throw new Error('その他の戦略を入力してください。');
 }
-async function saveCryptoJournalTrade() {
-  if (updateImportSaving || updateImportImagesBusy) return;
+async function saveCryptoJournalTrade(options = {}) {
+  if ((updateImportSaving && !options.unified) || updateImportImagesBusy) return;
   if (exitUpdateSaving || exitScreenshotsBusy) return;
   if (cryptoSaving || screenshotsBusy) return;
+  const generation = analysisFormGeneration;
   cryptoSaving = true;
   const button = document.querySelector('#trade-form button[onclick="saveTrade()"]');
   button.disabled = true;
   try {
     const old = editingId ? load().find(t => t.id === editingId) : null;
     const entryRawText = document.getElementById('crypto-analysis-text').value;
+    if (!editingId && document.getElementById('update-import-text').value.trim() && document.getElementById('update-import-text').value !== entryRawText) throw new Error('統一フォームで解析して確認してから保存してください。');
     const textKind = classifyChatgptText(document.getElementById('crypto-analysis-text').value);
     if (textKind.kind === 'update' || textKind.kind === 'invalid' || (textKind.explicit && editingId && entryRawText !== old?.cryptoJournal?.analysisText)) {
       throw new Error(textKind.kind === 'update' ? '更新テキストは既存取引のUpdate Import欄へ貼り付けてください。' : 'New Entryは新規取引画面で登録してください。更新種別も確認してください。');
@@ -192,21 +197,9 @@ async function saveCryptoJournalTrade() {
     const asset = selectedCryptoChoice('crypto-asset');
     const symbol = asset === 'その他' ? document.getElementById('crypto-symbol-other').value.trim().toUpperCase() : asset;
     if (!symbol) throw new Error('銘柄を入力してください。');
-    const c = { ...(old?.cryptoJournal || {}), version: 1, direction: selectedCryptoChoice('crypto-direction'),
-      entryAt: document.getElementById('crypto-entry-at').value, exitAt: document.getElementById('crypto-exit-at').value,
-      resultMode: cryptoResultManual ? 'manual' : 'auto', entryPrice: cryptoNumber('crypto-entry-price'),
-      stopLossPrice: cryptoNumber('crypto-sl'), takeProfitPrice: cryptoNumber('crypto-tp'), positionSize: cryptoNumber('crypto-size'),
-      realizedPnl: cryptoNumber('crypto-pnl'), result: selectedCryptoChoice('crypto-result'), strategy: selectedCryptoChoice('crypto-strategy'),
-      strategyOther: document.getElementById('crypto-strategy-other').value.trim(),
-      analysisText: document.getElementById('crypto-analysis-text').value,
-      entryReason: document.getElementById('crypto-reason').value, review: document.getElementById('crypto-review').value,
-      orderFlow: { ...(old?.cryptoJournal?.orderFlow || {}), ...Object.fromEntries(CRYPTO_FLOW_FIELDS.map(([key]) =>
-        [key, document.getElementById('crypto-flow-' + key).value])) } };
-    const entryAnalysis = Object.fromEntries(ENTRY_ANALYSIS_FIELDS.map(([key]) => [key, document.getElementById('crypto-analysis-' + key).value]));
-    if (old?.cryptoJournal?.entryAnalysis !== undefined || Object.values(entryAnalysis).some(Boolean)) c.entryAnalysis = { ...old?.cryptoJournal?.entryAnalysis, ...entryAnalysis };
-    validateCryptoJournal(c);
+    const c = readCryptoJournalDraft(old);
     const trade = { ...(old || {}), id: old?.id || uid(), symbol, type: old?.type || 'stock', date: c.entryAt.split('T')[0],
-      screenshots: screenshotsAsBlobs(screenshotDraft),
+      screenshots: screenshotsAsBlobs([...screenshotDraft, ...(options.importImages || [])]),
       side: c.direction.toLowerCase(), cryptoJournal: c, notes: old?.notes || '',
       tags: getCheckedTagIds(), mistakes: getCheckedMistakeIds(), rules: getCheckedRuleIds(),
       legs: [{ ...(old?.legs?.[0] || {}), id: old?.legs?.[0]?.id || uid(), action: c.direction === 'Long' ? 'buy' : 'sell',
@@ -214,12 +207,16 @@ async function saveCryptoJournalTrade() {
     Object.assign(trade, applyExitUpdateDraft(trade));
     validateScreenshots(trade.screenshots);
     validateTradeEvents(trade.events);
+    validateTradeSummary(trade);
     await dbPut('trades', trade);
     _trades = old ? load().map(t => t.id === trade.id ? trade : t) : [...load(), trade];
+    if (generation !== analysisFormGeneration) { renderStats(); renderCalendar(); if (state.view === 'trades') renderTrades(); return trade; }
     hideForm(); clearForm();
     if (!activeWeekStart) activeDate = trade.date;
     refreshCurrentModal(); renderStats(); renderCalendar();
     if (state.view === 'trades') renderTrades();
+    completeTradeEditorNavigation();
+    return trade;
   } catch (error) {
     console.error('[TJ] Crypto save failed:', error);
     if (!_tjUnavailable) alert(error.message || '保存できませんでした。');
@@ -231,6 +228,7 @@ async function saveCryptoJournalTrade() {
 function cryptoTradeSummary(t) {
   if (!isCryptoTrade(t)) return '';
   const c = t.cryptoJournal;
+  if (hasResolvedTradeState(t)) return resolvedTradeSummaryHtml(t);
   return `<div class="crypto-summary"><strong>${escHtml(c.direction)} · ${escHtml(c.result || '結果未選択')}</strong>
     ${c.strategy ? `<span class="trade-tag-badge">${escHtml(c.strategy === 'その他' ? c.strategyOther : c.strategy)}</span>` : ''}
     <span>Entry ${escHtml(c.entryAt.replace('T', ' '))} / ${c.entryPrice}</span>
@@ -241,12 +239,30 @@ function cryptoTradeDetails(t) {
   if (!isCryptoTrade(t)) return '';
   const c = t.cryptoJournal;
   const text = (label, value) => value ? `<div><strong>${label}</strong><p>${escHtml(value)}</p></div>` : '';
-  return `<section class="crypto-trade-details"><h3>Entry情報・Entry時分析</h3>${cryptoTradeSummary(t)}
-    <p>実現損益: ${c.realizedPnl ?? '未入力'}（手入力・${cryptoRealizationDate(t) ? '決済日集計' : '決済日時または金額未登録のため集計対象外'}）</p>
+  const entryInfo = hasResolvedTradeState(t) ? `<div class="crypto-summary"><strong>初期Entry · ${escHtml(c.direction)}</strong><span>Entry ${escHtml(c.entryAt.replace('T', ' '))} / ${c.entryPrice}</span><span>初期SL ${c.stopLossPrice ?? '—'} / 初期TP ${c.takeProfitPrice ?? '—'} / 初期数量 ${c.positionSize}</span><span>戦略 ${escHtml(c.strategy === 'その他' ? c.strategyOther : c.strategy)}</span></div>` : cryptoTradeSummary(t);
+  return `<section class="crypto-trade-details"><h3>Entry情報・Entry時分析</h3>${entryInfo}
+    ${hasResolvedTradeState(t) ? '' : `<p>実現損益: ${c.realizedPnl ?? '未入力'}（手入力・${cryptoRealizationDate(t) ? '決済日集計' : '決済日時または金額未登録のため集計対象外'}）</p>`}
     ${c.analysisText ? `<details class="crypto-details"><summary>ChatGPT解析テキスト（原文）</summary><pre class="analysis-original">${escHtml(c.analysisText)}</pre></details>` : ''}
     ${text('エントリー根拠', c.entryReason)}${text('振り返り（従来欄・Entry時メモ）', c.review)}
     <details class="crypto-details"><summary>Entry分析 / オーダーフロー・デリバティブ情報</summary>
       ${ENTRY_ANALYSIS_FIELDS.map(([key, label]) => text(label, c.entryAnalysis?.[key])).join('')}
       ${CRYPTO_FLOW_FIELDS.map(([key, label]) => text(label, c.orderFlow?.[key])).join('')}
     </details></section>`;
+}
+
+function readCryptoJournalDraft(old) {
+  const c = { ...(old?.cryptoJournal || {}), version: 1, direction: selectedCryptoChoice('crypto-direction'),
+    entryAt: document.getElementById('crypto-entry-at').value, exitAt: document.getElementById('crypto-exit-at').value,
+    resultMode: cryptoResultManual ? 'manual' : 'auto', entryPrice: cryptoNumber('crypto-entry-price'),
+    stopLossPrice: cryptoNumber('crypto-sl'), takeProfitPrice: cryptoNumber('crypto-tp'), positionSize: cryptoNumber('crypto-size'),
+    realizedPnl: cryptoNumber('crypto-pnl'), result: selectedCryptoChoice('crypto-result'), strategy: selectedCryptoChoice('crypto-strategy'),
+    strategyOther: document.getElementById('crypto-strategy-other').value.trim(),
+    analysisText: document.getElementById('crypto-analysis-text').value,
+    entryReason: document.getElementById('crypto-reason').value, review: document.getElementById('crypto-review').value,
+    orderFlow: { ...(old?.cryptoJournal?.orderFlow || {}), ...Object.fromEntries(CRYPTO_FLOW_FIELDS.map(([key]) =>
+    [key, document.getElementById('crypto-flow-' + key).value])) } };
+  const entryAnalysis = Object.fromEntries(ENTRY_ANALYSIS_FIELDS.map(([key]) => [key, document.getElementById('crypto-analysis-' + key).value]));
+  if (old?.cryptoJournal?.entryAnalysis !== undefined || Object.values(entryAnalysis).some(Boolean)) c.entryAnalysis = { ...old?.cryptoJournal?.entryAnalysis, ...entryAnalysis };
+  validateCryptoJournal(c);
+  return c;
 }

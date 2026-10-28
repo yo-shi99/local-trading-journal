@@ -46,6 +46,7 @@ async function saveTradeExitUpdate(tradeId, fields, images = []) {
 }
 
 function resetExitUpdateDraft(trade) {
+  document.getElementById('exit-update-editor').open = false;
   exitUpdateGeneration++;
   exitScreenshotDraft = [];
   exitScreenshotsBusy = false;
@@ -80,13 +81,15 @@ function applyExitUpdateDraft(trade) {
 async function saveExitUpdateFromForm() {
   if (updateImportSaving || updateImportImagesBusy) return;
   if (!editingId || exitUpdateSaving || exitScreenshotsBusy || screenshotsBusy || cryptoSaving || legacyTradeSaving) return;
-  const id = editingId;
+  const id = editingId, generation = exitUpdateGeneration;
   exitUpdateSaving = true;
   document.getElementById('save-exit-update').disabled = true;
   try {
     await saveTradeExitUpdate(id, exitUpdateFieldsFromForm(), exitScreenshotDraft);
+    if (generation !== exitUpdateGeneration || editingId !== id) { renderStats(); renderCalendar(); if (state.view === 'trades') renderTrades(); return; }
     hideForm(); clearForm(); refreshCurrentModal(); renderStats(); renderCalendar();
     if (state.view === 'trades') renderTrades();
+    completeTradeEditorNavigation();
   } catch (error) {
     console.error('[TJ] Exit update failed:', error);
     if (!_tjUnavailable) alert(error.message || 'Exit / Updateを保存できませんでした。');

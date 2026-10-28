@@ -32,9 +32,9 @@ ROE: -3.96%
   }
   async function create(page, withImage = false) {
     await page.locator('.header-add-btn').click(); await page.waitForSelector('#crypto-entry-price', { state: 'visible' });
-    assert.equal(await page.locator('#update-import').isVisible(), false);
-    await page.locator('#crypto-analysis-text').fill('銘柄: BTC\n方向: Short\nEntry: 80000\nSize: 0.01\nCVD: 元のCVD\nOI: 元のOI\nFunding: +0.01%\nエントリー根拠: 元の根拠\n振り返り: Entry時メモ');
-    await page.locator('#analysis-apply').click(); await page.locator('#crypto-entry-at').fill('2026-10-26T16:00');
+    assert.equal(await page.locator('#update-import').isVisible(), true);
+    await page.locator('#update-import-text').fill('銘柄: BTC\n方向: Short\nEntry: 80000\nSize: 0.01\nCVD: 元のCVD\nOI: 元のOI\nFunding: +0.01%\nエントリー根拠: 元の根拠\n振り返り: Entry時メモ');
+    await page.locator('#update-import-analyse').click(); await page.locator('#crypto-entry-at').fill('2026-10-26T16:00');
     if (withImage) { await page.setInputFiles('#screenshot-input', await image(page)); await page.waitForFunction(() => !screenshotsBusy && screenshotDraft.length === 1); }
     await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
     await page.waitForFunction(() => load().length === 1 && document.getElementById('trade-form').style.display === 'none');
@@ -49,6 +49,7 @@ ROE: -3.96%
     assert.equal(await page.locator('#update-import-confirm').isEnabled(), true);
     await page.locator('#update-import-confirm').click();
     await page.waitForFunction(count => load()[0].events?.length === count && document.getElementById('trade-form').style.display === 'none', count);
+    await page.evaluate(() => openDay(load()[0].date));
   }
   async function snapshot(page) { return page.evaluate(async () => screenshotsForBackup(await dbSnapshot())); }
   async function commit(page, id, raw, images = []) {
@@ -87,7 +88,7 @@ ROE: -3.96%
 
     await test('required real Final Exit stores seconds, raw text, Loss/review, image; protects all Entry data and unsaved changes', async page => {
       const id = await create(page, true), before = (await snapshot(page)).trades[0]; await edit(page, id);
-      await page.locator('#crypto-reason').fill('保存してはいけない根拠'); await page.locator('#crypto-analysis-text').fill('上書きしてはいけない原文');
+      await page.locator('#crypto-reason').fill('保存してはいけない根拠'); await page.locator('#update-import-text').fill('上書きしてはいけない原文');
       await page.evaluate(() => { screenshotDraft = []; renderScreenshotDraft(); });
       await page.setInputFiles('#update-import-input', await image(page)); await page.waitForFunction(() => !updateImportImagesBusy && updateImportImages.length === 1);
       await analyse(page, actual);
@@ -128,10 +129,10 @@ ROE: -3.96%
       await page.locator('.trade-event-card details summary').click(); assert.equal(await page.locator('.trade-event-card details img').count(), 0);
     });
 
-    await test('cancel clears pending update without DB writes and retains raw text', async page => {
+    await test('cancel discards pending update and raw text without DB writes', async page => {
       const id = await create(page), before = await snapshot(page); await edit(page, id); await analyse(page, text());
       await page.locator('#update-import-cancel').click(); assert.equal(await page.locator('#update-import-confirm').isEnabled(), false);
-      assert.equal(await page.locator('#update-import-text').inputValue(), text()); assert.deepEqual(await snapshot(page), before);
+      assert.equal(await page.locator('#update-import-text').inputValue(), ''); assert.equal(await page.locator('#trade-form').isVisible(), false); assert.deepEqual(await snapshot(page), before);
     });
 
     await test('duplicate tuple warns and cannot save again', async page => {

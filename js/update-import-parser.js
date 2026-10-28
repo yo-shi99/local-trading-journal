@@ -3,6 +3,7 @@ function updateImportKey(value) { return value.normalize('NFKC').toLowerCase().r
 function updateImportTypeKey(value) { return value.normalize('NFKC').toLowerCase().replace(/\s/g, ''); }
 const UPDATE_IMPORT_TYPES = new Map();
 for (const [type, names] of Object.entries({
+  'Final Summary': ['Final Summary'],
   'Add Entry': ['Add Entry', 'AddEntry', '追加エントリー'],
   'Partial TP': ['Partial TP', 'PartialTP', '部分利確'],
   'Partial SL': ['Partial SL', 'PartialSL', '部分損切り'],
@@ -51,6 +52,8 @@ function parseUpdateImportText(rawText) {
       blocks.push(current);
     } else if (current) current.value += '\n' + line;
   }
+  const typeBlocks = blocks.filter(block => block.key === 'type');
+  const summaryInput = typeBlocks.length === 1 && UPDATE_IMPORT_TYPES.get(updateImportTypeKey(typeBlocks[0].value.trim())) === 'Final Summary';
   const seen = new Set();
   for (const block of blocks) {
     const { key, label } = block, value = block.value.trim();
@@ -61,7 +64,8 @@ function parseUpdateImportText(rawText) {
     if (key === 'type') parsed = UPDATE_IMPORT_TYPES.get(updateImportTypeKey(value));
     else if (key === 'datetime') parsed = updateImportDatetime(value);
     else if (['price', 'quantity', 'realizedPnl'].includes(key)) {
-      if (key === 'realizedPnl' && (value === '' || value.toLowerCase() === 'null')) parsed = null;
+      if (summaryInput && key === 'price' && value === '') parsed = null;
+      else if (key === 'realizedPnl' && (value === '' || value.toLowerCase() === 'null')) parsed = null;
       else {
         const numeric = updateImportNumber(value);
         parsed = numeric && numeric.unit !== '%' ? numeric.number : undefined;
@@ -73,36 +77,53 @@ function parseUpdateImportText(rawText) {
     if (parsed === undefined) errors.push(`${label}: 形式または値を確認してください。`);
     else fields[key] = parsed;
   }
-  for (const [key, label] of [['type', '更新種別'], ['datetime', 'datetime（日時）'], ['price', 'price（価格）'], ['quantity', 'quantity（数量）']]) {
+  const required = summaryInput ? [['type', '更新種別'], ['datetime', 'datetime（日時）'], ['realizedPnl', '実現損益'], ['result', '結果']] : [['type', '更新種別'], ['datetime', 'datetime（日時）'], ['price', 'price（価格）'], ['quantity', 'quantity（数量）']];
+  for (const [key, label] of required) {
     if (!Object.hasOwn(fields, key)) errors.push(`${label}が不足、または無効です。`);
   }
+  if (summaryInput && !Number.isFinite(fields.realizedPnl)) errors.push('Final Summaryでは実現損益の確定値が必須です（0は有効）。');
+  if (summaryInput && fields.quantity !== undefined) warnings.push('Final Summaryの数量は原文にだけ保持し、残数量や決済数量の履歴を推測しません。');
   const event = { type: fields.type, datetime: fields.datetime, price: fields.price, quantity: fields.quantity,
     realizedPnl: fields.realizedPnl ?? null, reason: fields.reason || '',
     memo: [fields.memo, fields.review].filter(value => value !== undefined && value !== '').join('\n'), rawText };
   const exitUpdate = {};
-  if (fields.type === 'Final Exit') for (const key of ['review', 'reason', 'memo', 'result']) {
-    if (Object.hasOwn(fields, key)) exitUpdate[key] = fields[key];
+  if (['Final Exit', 'Final Summary'].includes(fields.type)) for (const key of ['review', 'reason', 'memo', 'result']) {
+    if (Object.hasOwn(fields, key) && !(summaryInput && key === 'result')) exitUpdate[key] = fields[key];
   }
   const analysis = Object.fromEntries(EXIT_ANALYSIS_FIELDS.filter(([key]) => Object.hasOwn(fields, key)).map(([key]) => [key, fields[key]]));
   if (Object.keys(analysis).length) {
-    if (fields.type === 'Final Exit') exitUpdate.analysis = analysis;
+    if (['Final Exit', 'Final Summary'].includes(fields.type)) exitUpdate.analysis = analysis;
     else warnings.push('Exit分析は原文に保持します。分析の反映はFinal Exitのみです。');
   }
   if (event.realizedPnl === null) warnings.push('実現損益は未記録（null）で保存します。');
-  if (fields.result && fields.type !== 'Final Exit') warnings.push('結果は原文に保持します。Exit情報への反映はFinal Exitのみです。');
-  return { event, exitUpdate, fields, units, errors, warnings, unknown };
+  if (fields.result && !['Final Exit', 'Final Summary'].includes(fields.type)) warnings.push('結果は原文に保持します。Exit情報への反映はFinal Exitのみです。');
+  const summary = summaryInput ? { datetime: fields.datetime, price: fields.price ?? null, realizedPnl: fields.realizedPnl, result: fields.result, rawText } : null;
+  return { event, summary, exitUpdate, fields, units, errors, warnings, unknown };
 }
 
 function updateImportRevision(trade) {
   return JSON.stringify({ id: trade.id, symbol: trade.symbol, type: trade.type, date: trade.date, side: trade.side,
     cryptoJournal: trade.cryptoJournal, legs: trade.legs, entryPrice: trade.entryPrice, quantity: trade.quantity,
-    events: trade.events, exitUpdate: trade.exitUpdate,
+    events: trade.events, exitUpdate: trade.exitUpdate, historyMode: trade.historyMode, finalSummary: trade.finalSummary,
     screenshots: trade.screenshots?.map(({ blob, dataUrl, ...metadata }) => metadata) });
 }
 
 function previewUpdateImport(trade, rawText) {
   const parsed = parseUpdateImportText(rawText), errors = [...parsed.errors];
-  const before = getTradeState(trade);
+  const before = getResolvedTradeState(trade);
+  if (trade.historyMode === 'summary') errors.push('Summaryでクローズ済みです。更新の二重登録はできません。');
+  if (parsed.summary) {
+    try { validateTradeEvents(trade.events); } catch (error) { errors.push(error.message); }
+    const storedEvents = Array.isArray(trade.events) ? trade.events : [];
+    const baselineTime = storedEvents.some(e => e.type === 'Entry') ? null : getLegacyEntryBaseline(trade)?.datetime;
+    const times = [baselineTime, ...storedEvents.map(e => e.datetime)].filter(Boolean);
+    if (parsed.summary.datetime && times.some(time => tradeEventTimeKey(time) > tradeEventTimeKey(parsed.summary.datetime))) errors.push('決済日時は保存済みのEntry・売買イベント以降にしてください。');
+    const candidate = { ...trade, historyMode: 'summary', finalSummary: parsed.summary };
+    if (!errors.length) { try { validateTradeSummary(candidate); } catch (error) { errors.push(error.message); } }
+    const after = errors.length ? null : getResolvedTradeState(candidate);
+    const warnings = [...parsed.warnings, 'Summaryとしてクローズします。途中イベントは作らず、既存履歴を保持したまま集計はこの最終損益へ切り替わります。'];
+    return { ...parsed, errors, warnings, before, after, revision: updateImportRevision(trade), tradeId: trade.id };
+  }
   let after = null;
   if (!before.isValid) errors.push('現在の取引状態がInvalidです。既存履歴を確認してください。');
   if (!errors.length) {
@@ -126,6 +147,7 @@ async function commitUpdateImport({ tradeId, rawText, expectedRevision, images =
   if (typeof rawText !== 'string' || !rawText.trim() || typeof expectedRevision !== 'string') throw new Error('解析プレビューを確認してから保存してください。');
   const parsed = parseUpdateImportText(rawText);
   if (parsed.errors.length) throw new Error(parsed.errors.join('\n'));
+  if (parsed.summary) return commitFinalSummary({ tradeId, rawText, expectedRevision, images });
   return appendTradeEvent(tradeId, parsed.event, {
     images,
     exitUpdate: Object.keys(parsed.exitUpdate).length ? parsed.exitUpdate : undefined,
@@ -135,4 +157,36 @@ async function commitUpdateImport({ tradeId, rawText, expectedRevision, images =
       if (updateImportRevision(current) !== expectedRevision) throw new Error('プレビュー後に対象取引が変更されました。再解析して確認してください。');
     },
   });
+}
+
+async function commitFinalSummary({ tradeId, rawText, expectedRevision, images }) {
+  const additions = screenshotsAsBlobs(images);
+  validateScreenshots(additions);
+  const db = await _openTjDb();
+  const saved = await new Promise((resolve, reject) => {
+    const tx = db.transaction('trades', 'readwrite');
+    let updated;
+    _tjWriteComplete(tx, () => resolve(updated), reject);
+    const store = tx.objectStore('trades'), request = store.get(tradeId);
+    request.onsuccess = () => {
+      try {
+        if (!request.result) throw new Error('対象取引が見つかりません。');
+        const preview = previewUpdateImport(request.result, rawText);
+        if (preview.errors.length) throw new Error(preview.errors.join('\n'));
+        if (preview.revision !== expectedRevision) throw new Error('対象取引が変更されました。再解析してください。');
+        updated = { ...request.result, historyMode: 'summary', finalSummary: preview.summary };
+        if (Object.keys(preview.exitUpdate).length) {
+          updated.exitUpdate = { review: '', reason: '', memo: '', ...updated.exitUpdate, ...preview.exitUpdate };
+          if (preview.exitUpdate.analysis) updated.exitUpdate.analysis = { ...request.result.exitUpdate?.analysis, ...preview.exitUpdate.analysis };
+          validateExitUpdate(updated.exitUpdate);
+        }
+        if (additions.length) updated.screenshots = [...(updated.screenshots || []), ...additions];
+        validateScreenshots(updated.screenshots);
+        validateTradeSummary(updated);
+      } catch (error) { reject(error); return; }
+      try { store.put(updated); } catch (error) { tx.abort(); reject(error); }
+    };
+  });
+  _trades = load().map(trade => trade.id === saved.id ? saved : trade);
+  return structuredClone(saved);
 }

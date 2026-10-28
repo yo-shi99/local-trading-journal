@@ -24,8 +24,8 @@ const event = (type, quantity, i = 0, price = 80000, realizedPnl = 0) => ({ id: 
   }
   async function create(page, includeImage = false) {
     await page.locator('.header-add-btn').click(); await page.waitForSelector('#crypto-entry-price', { state: 'visible' });
-    await page.locator('#crypto-analysis-text').fill('銘柄: BTC\n方向: Short\nEntry: 80000\nSize: 0.01\nCVD: Entry時解析\nエントリー根拠: 元のEntry根拠\n振り返り: 元の振り返り');
-    await page.locator('#analysis-apply').click(); await page.locator('#crypto-entry-at').fill('2026-10-27T10:00');
+    await page.locator('#update-import-text').fill('銘柄: BTC\n方向: Short\nEntry: 80000\nSize: 0.01\nCVD: Entry時解析\nエントリー根拠: 元のEntry根拠\n振り返り: 元の振り返り');
+    await page.locator('#update-import-analyse').click(); await page.locator('#crypto-entry-at').fill('2026-10-27T10:00');
     if (includeImage) { await page.setInputFiles('#screenshot-input', await image(page)); await page.waitForFunction(() => !screenshotsBusy && screenshotDraft.length === 1); }
     await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
     await page.waitForFunction(() => load().length === 1 && document.getElementById('trade-form').style.display === 'none');
@@ -109,11 +109,11 @@ const event = (type, quantity, i = 0, price = 80000, realizedPnl = 0) => ({ id: 
       await edit(page, id);
       await page.locator('#crypto-reason').fill('保存してはいけないEntry変更');
       await page.locator('#crypto-review').fill('保存してはいけない旧振り返り変更');
-      await page.locator('#crypto-analysis-text').fill('上書きしてはいけない原文');
+      await page.locator('#update-import-text').fill('上書きしてはいけない原文');
       await page.evaluate(() => { screenshotDraft = []; renderScreenshotDraft(); });
-      await page.locator('#exit-update-review').fill('Exitレビュー\n独立保存');
+      await page.locator('#exit-update-editor').evaluate(el => el.open = true); await page.locator('#exit-update-review').fill('Exitレビュー\n独立保存');
       await page.locator('#exit-update-reason').fill('利確条件'); await page.locator('#exit-update-memo').fill('更新メモ');
-      await page.setInputFiles('#exit-update-input', await image(page, 'exit.png'));
+      await page.locator('#exit-update-editor').evaluate(el => el.open = true); await page.setInputFiles('#exit-update-input', await image(page, 'exit.png'));
       await page.waitForFunction(() => !exitScreenshotsBusy && exitScreenshotDraft.length === 1);
       await saveExit(page); await page.reload(); await page.waitForFunction(() => load().length === 1);
       const after = (await snapshot(page)).trades[0];
@@ -137,9 +137,9 @@ const event = (type, quantity, i = 0, price = 80000, realizedPnl = 0) => ({ id: 
     await test('new trade can independently save Entry memo and Exit review with normal Save Trade', async page => {
       await page.locator('.header-add-btn').click(); await page.waitForSelector('#crypto-entry-price', { state: 'visible' });
       await page.locator('#crypto-entry-price').fill('80000'); await page.locator('#crypto-size').fill('0.01');
-      await page.locator('#crypto-review').fill('Entry時メモ'); await page.locator('#exit-update-review').fill('Exitレビュー');
+      await page.locator('#crypto-review').fill('Entry時メモ'); await page.locator('#exit-update-editor').evaluate(el => el.open = true); await page.locator('#exit-update-review').fill('Exitレビュー');
       await page.locator('#exit-update-category').selectOption('Update');
-      await page.setInputFiles('#exit-update-input', await image(page, 'update.png'));
+      await page.locator('#exit-update-editor').evaluate(el => el.open = true); await page.setInputFiles('#exit-update-input', await image(page, 'update.png'));
       await page.waitForFunction(() => !exitScreenshotsBusy && exitScreenshotDraft.length === 1);
       await page.getByRole('button', { name: 'Save Trade', exact: true }).click(); await page.waitForFunction(() => load().length === 1);
       await page.reload(); await page.waitForFunction(() => load().length === 1);
@@ -207,7 +207,7 @@ const event = (type, quantity, i = 0, price = 80000, realizedPnl = 0) => ({ id: 
       const id = await create(page); await edit(page, id);
       await page.evaluate(() => { const original = compressScreenshot; window.releaseExitImage = null;
         compressScreenshot = file => new Promise(resolve => { window.releaseExitImage = async () => resolve(await original(file)); }); });
-      await page.setInputFiles('#exit-update-input', await image(page));
+      await page.locator('#exit-update-editor').evaluate(el => el.open = true); await page.setInputFiles('#exit-update-input', await image(page));
       await page.waitForFunction(() => exitScreenshotsBusy && !!window.releaseExitImage);
       await page.evaluate(() => cancelForm()); await page.evaluate(() => openAddGlobal());
       await page.waitForSelector('#crypto-entry-price', { state: 'visible' });

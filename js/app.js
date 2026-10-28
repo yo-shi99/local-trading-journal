@@ -1,6 +1,6 @@
 const state = { view: 'calendar', tradesVisited: false };
 
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 
 // Presentation-only mode: remove the body class to restore the original interface.
 function isSimpleJournal() { return document.body.classList.contains('journal-simple'); }
@@ -71,6 +71,7 @@ function switchView(v) {
 }
 
 function openAddGlobal() {
+  const navigationTicket = prepareTradeEditorNavigation();
   activeDate = todayStr();
   editingId  = null;
   const dt = new Date();
@@ -79,15 +80,16 @@ function openAddGlobal() {
   hideForm();
   refreshDayModal();
   document.getElementById('day-overlay').classList.add('open');
-  setTimeout(() => showForm(null), 50);
+  setTimeout(() => { if (isTradeEditorOpenTicket(navigationTicket)) showForm(null); }, 50);
 }
 
 function editFromTable(id) {
   const t = load().find(x => x.id === id);
   if (!t) return;
+  const navigationTicket = prepareTradeEditorNavigation();
   activeDate = t.date;
   openDay(t.date);
-  setTimeout(() => showForm(id), 60);
+  setTimeout(() => { if (isTradeEditorOpenTicket(navigationTicket)) showForm(id); }, 60);
 }
 
 // ─── CSV TEMPLATE & IMPORT ───
@@ -367,6 +369,7 @@ function parseJournalBackup(raw) {
       }
       if (name === 'trades') validateScreenshots(record.screenshots);
       if (name === 'trades') validateTradeEvents(record.events);
+      if (name === 'trades') validateTradeSummary(record);
       if (name === 'trades') validateExitUpdate(record.exitUpdate);
       if (name === 'trades' && record.cryptoJournal !== undefined) validateCryptoJournal(record.cryptoJournal);
       seen.add(record[key]);

@@ -1,5 +1,7 @@
 # ChatGPT更新テキストの取り込み（第4段階）
 
+> 現行1.12.0では[統一ワークフロー](unified-trade-workflow.md)が入力導線・表示集計・Summary・navigationの仕様を更新しています。以下は各段階の保存／計算基盤の記録です。
+
 既存取引の編集画面に、独立した「ChatGPT更新テキストを貼り付け」欄を追加した。新規取引には表示しない。新規Entry用の `js/analysis-import.js`、解析フォーマット、Entry項目は変更しない。
 
 ## 操作

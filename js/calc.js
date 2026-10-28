@@ -1,6 +1,7 @@
 // FIFO match buy legs against sell legs.
 // Returns { 'YYYY-MM-DD': realizedPnl, ... } keyed by each sell leg's date.
 function getRealizationsByDate(t) {
+  if (hasResolvedTradeState(t)) return getResolvedRealizations(t);
   if (isCryptoTrade(t)) { const date = cryptoRealizationDate(t); return date ? { [date]: t.cryptoJournal.realizedPnl } : {}; }
   if (!t.legs || !t.legs.length) {
     // Legacy format — attribute to trade date
@@ -66,6 +67,7 @@ function getRealizationsByDate(t) {
 }
 
 function getOpenQty(t) {
+  if (hasResolvedTradeState(t)) return getResolvedTradeState(t).remainingQuantity;
   if (isCryptoTrade(t)) return t.cryptoJournal.exitAt ? 0 : t.cryptoJournal.positionSize;
   if (!t.legs || !t.legs.length) return 0;
   const buyQueue = t.legs
@@ -85,6 +87,7 @@ function getOpenQty(t) {
 }
 
 function getPnl(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return s.isValid ? s.realizedPnl : 0; }
   if (isCryptoTrade(t)) return cryptoRealizationDate(t) ? t.cryptoJournal.realizedPnl : 0;
   if (t.legs && t.legs.length) {
     const total = Object.values(getRealizationsByDate(t)).reduce((s, p) => s + p, 0);
@@ -105,6 +108,8 @@ function _getPnlLegacy(t) {
 }
 
 function computeStats(trades) {
+  const invalid = trades.filter(t => hasResolvedTradeState(t) && !getResolvedTradeState(t).isValid).length;
+  trades = trades.filter(t => !hasResolvedTradeState(t) || getResolvedTradeState(t).isValid);
   let totalPnl = 0, wins = 0, losses = 0, grossWin = 0, grossLoss = 0;
   const byDate = {};
   let positivePnlCount = 0, negativePnlCount = 0;
@@ -113,10 +118,11 @@ function computeStats(trades) {
     totalPnl += p;
     if (tradeOutcome(t) === 'Win') wins++;
     if (tradeOutcome(t) === 'Loss') losses++;
-    if (p > 0) { positivePnlCount++; grossWin += p; }
-    if (p < 0) { negativePnlCount++; grossLoss += Math.abs(p); }
+    const settled = !hasResolvedTradeState(t) || getResolvedTradeState(t).status === 'Closed';
+    if (settled && p > 0) { positivePnlCount++; grossWin += p; }
+    if (settled && p < 0) { negativePnlCount++; grossLoss += Math.abs(p); }
     // Use sell dates for best/worst day calculation
-    const realizations = t.legs && t.legs.length ? getRealizationsByDate(t) : { [t.date]: p };
+    const realizations = getRealizationsByDate(t);
     for (const [date, dp] of Object.entries(realizations)) {
       byDate[date] = (byDate[date] || 0) + dp;
     }
@@ -124,18 +130,19 @@ function computeStats(trades) {
   const days     = Object.values(byDate);
   const bestDay  = days.length ? Math.max(...days) : null;
   const worstDay = days.length ? Math.min(...days) : null;
-  const classified = trades.filter(t => !isCryptoTrade(t) || ['Win', 'Loss', 'BE'].includes(tradeOutcome(t))).length;
+  const classified = trades.filter(t => hasResolvedTradeState(t) ? ['Win', 'Loss', 'BE'].includes(tradeOutcome(t)) : !isCryptoTrade(t) || ['Win', 'Loss', 'BE'].includes(tradeOutcome(t))).length;
   const winRate = classified ? ((wins / classified) * 100).toFixed(1) : '0.0';
-  const avgWin   = positivePnlCount ? Math.round(grossWin / positivePnlCount).toLocaleString('en-US')   : null;
-  const avgLoss  = negativePnlCount ? Math.round(grossLoss / negativePnlCount).toLocaleString('en-US') : null;
+  const avgWin   = positivePnlCount ? (trades.some(t => isCryptoTrade(t) || hasResolvedTradeState(t)) ? grossWin / positivePnlCount : Math.round(grossWin / positivePnlCount)).toLocaleString('en-US', { maximumFractionDigits: 8 })   : null;
+  const avgLoss  = negativePnlCount ? (trades.some(t => isCryptoTrade(t) || hasResolvedTradeState(t)) ? grossLoss / negativePnlCount : Math.round(grossLoss / negativePnlCount)).toLocaleString('en-US', { maximumFractionDigits: 8 }) : null;
   const pf       = grossLoss > 0 ? (grossWin / grossLoss).toFixed(2)
                  : grossWin  > 0 ? '∞' : '—';
-  return { totalPnl, wins, losses, grossWin, grossLoss, winRate, avgWin, avgLoss, pf, bestDay, worstDay, total: trades.length };
+  return { totalPnl, wins, losses, grossWin, grossLoss, winRate, avgWin, avgLoss, pf, bestDay, worstDay, total: trades.length, invalid, classifiedCount: classified, positivePnlCount, negativePnlCount, avgWinValue: positivePnlCount ? grossWin / positivePnlCount : null, avgLossValue: negativePnlCount ? grossLoss / negativePnlCount : null };
 }
 
 // Dollar risk for a trade. Uses the stop-loss rows when they are defined,
 // otherwise the whole entry cost is treated as the amount at risk.
 function getTradeRisk(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t), sl = t.cryptoJournal?.stopLossPrice; return s.isValid && s.source === 'events' && Number.isFinite(sl) && s.averageEntryPrice !== null ? Math.abs(s.averageEntryPrice - sl) * s.totalEntryQuantity : null; }
   if (isCryptoTrade(t)) { const c = t.cryptoJournal; return c.stopLossPrice === null ? null : Math.abs(c.entryPrice - c.stopLossPrice) * c.positionSize; }
   const mult = t.type === 'option' ? 100 : 1;
 
@@ -163,6 +170,7 @@ function getTradeRisk(t) {
 }
 
 function getEntryQty(t) {
+  if (hasResolvedTradeState(t)) return getResolvedTradeState(t).totalEntryQuantity;
   if (isCryptoTrade(t)) return t.cryptoJournal.positionSize;
   if (!t.legs || !t.legs.length) return parseFloat(t.quantity) || 0;
   return t.legs.filter(l => l.action === 'buy').reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0);
@@ -172,6 +180,15 @@ function getEntryQty(t) {
 // closed that day so partial closes carry only their share of the risk.
 // Mirrors the FIFO order of getRealizationsByDate.
 function getRiskByDate(t) {
+  if (hasResolvedTradeState(t)) {
+    const s = getResolvedTradeState(t), risk = getTradeRisk(t);
+    if (!s.isValid || s.source !== 'events' || !risk || !s.totalEntryQuantity) return {};
+    const result = {};
+    for (const e of t.events || []) if (['Partial TP', 'Partial SL', 'Final Exit'].includes(e.type)) {
+      const date = e.datetime.split('T')[0]; result[date] = (result[date] || 0) + risk * e.quantity / s.totalEntryQuantity;
+    }
+    return result;
+  }
   if (isCryptoTrade(t)) { const date = cryptoRealizationDate(t); return date ? { [date]: getTradeRisk(t) || 0 } : {}; }
   const risk     = getTradeRisk(t);
   const entryQty = getEntryQty(t);

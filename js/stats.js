@@ -16,6 +16,7 @@ function renderStats() {
     ['Avg Loss',      `<span class="neg">${s.avgLoss ? '-$'+s.avgLoss : '—'}</span>`],
     ['Profit Factor', `<span class="neu">${s.pf}</span>`],
   ];
+  if (s.invalid) cards.push(['Invalid（集計対象外）', `<span>${s.invalid}</span>`]);
   document.getElementById('stats-bar').innerHTML = cards.map(([lbl, val]) =>
     `<div class="stat-card"><div class="stat-label">${lbl}</div><div class="stat-value">${val}</div></div>`
   ).join('');

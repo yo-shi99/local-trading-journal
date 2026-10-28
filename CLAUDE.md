@@ -1,6 +1,6 @@
 # PROJECT: Local Trading Journal
 
-> Last updated: 2026-05-14 — keep this current. If something here is wrong, fix it before doing anything else.
+> Last updated: 2026-10-29 — keep this current. If something here is wrong, fix it before doing anything else.
 
 ---
 
@@ -8,8 +8,8 @@
 
 A privacy-first, browser-only trading journal that runs entirely on the user's machine — no account, no server (for the core journal), no data leaving the browser. All trade and plan data lives in IndexedDB. An optional **Signal Intel** background server (`signal-intel/`) adds local AI-powered news/signal analysis. Marketed as a free replacement for paid SaaS journals (Tradervue, TraderSync, Tradezella).
 
-**Stage:** Production (v1.1.0 in `version.json` / `index.html` — the README is occasionally ahead)
-**Primary user:** Active retail options & equities trader (the repo owner) who reviews trades daily
+**Stage:** Production crypto journal (v1.12.0; see `docs/unified-trade-workflow.md`)
+**Primary user:** Crypto trader using ChatGPT text import; legacy options/equities records remain supported who reviews trades daily
 **Success metric:** Daily use — every trade logged, every day's P&L tagged with rules/mistakes
 
 ---
@@ -24,7 +24,7 @@ A privacy-first, browser-only trading journal that runs entirely on the user's m
 | Build step | None | Open `index.html` directly or `python -m http.server 8080` |
 | Package manager | None for the journal | `npm` only inside `signal-intel/` |
 | Signal Intel server | Node.js 18+, Express, `@xenova/transformers` | Optional local server at port 3737 |
-| Tests | None currently | Manual browser testing |
+| Tests | Node assertions + Playwright in `tests/*.cjs` | Chromium including mobile and actual Service Worker |
 | Hosting | Local file:// or any static host | No deploy pipeline; users self-host |
 
 **Critical:** The journal itself has **zero npm dependencies** and **zero CDN calls**. Don't introduce any without explicit user approval — that's a core selling point.
@@ -113,11 +113,14 @@ local-trading-journal/
 
 ## 5. Versioning
 
-Version lives in **two** places that must stay in sync:
-1. `version.json` → `{ "version": "1.1.0" }`
-2. `index.html` → `<div class="logo-version" id="app-version">v1.1.0</div>`
+Version lives in **four** places that must stay in sync:
+1. `version.json` → `{ "version": "1.12.0" }`
+2. `index.html` → `<div class="logo-version" id="app-version">v1.12.0</div>`
 
-Bump both for any user-visible change. Use semver-ish: minor for new tabs/features, patch for fixes.
+3. `js/app.js` → `APP_VERSION`
+4. `sw.js` → `CACHE_VERSION` (bump whenever bundled assets change)
+
+Bump all four for any user-visible change. Use semver-ish: minor for new tabs/features, patch for fixes.
 
 ---
 
@@ -137,7 +140,7 @@ Bump both for any user-visible change. Use semver-ish: minor for new tabs/featur
 **After writing code**
 - Summarize what changed in a sentence or two — match the diff, don't oversell.
 - For UI changes you can't verify: say so explicitly. Don't claim a UI works without seeing it.
-- Suggest test cases (don't write them — there's no test framework here).
+- Run the relevant automated tests and the full regression suite.
 
 **Communication**
 - Be direct. Skip preamble.
@@ -198,7 +201,7 @@ git status
 git log --oneline -10
 ```
 
-There's no `pnpm dev`, no `pnpm test`, no `pnpm typecheck`. If you reach for one of those out of habit, stop.
+Run test scripts with `node tests/<suite>.cjs` against a local HTTP server (Playwright/Chromium required in the test environment). There's no `pnpm dev`, no `pnpm test`, no `pnpm typecheck`. If you reach for one of those out of habit, stop.
 
 ---
 
@@ -215,7 +218,7 @@ There's no `pnpm dev`, no `pnpm test`, no `pnpm typecheck`. If you reach for one
 - Vanilla JS, no framework. Chosen so the app stays a single static file bundle that opens with no install.
 - IndexedDB with in-memory cache (not raw IDB or a wrapper library). Chose this so the entire public API stays sync — migrating thousands of call sites to async would have been a much bigger lift.
 - Signal Intel uses local `@xenova/transformers` (not a hosted LLM API). Chosen so users don't need API keys and signal analysis stays free + private.
-- Option strategies (v1.1.0) link multiple trades via a dedicated `optionStrategies` store with `tradeIds[]`. **No back-pointer field on the trade record** — `getStrategyForTrade(tradeId)` scans the strategies cache. Chosen to keep the trade schema untouched; the strategies cache is small enough that scanning is free in practice.
+- Option strategies (v1.12.0) link multiple trades via a dedicated `optionStrategies` store with `tradeIds[]`. **No back-pointer field on the trade record** — `getStrategyForTrade(tradeId)` scans the strategies cache. Chosen to keep the trade schema untouched; the strategies cache is small enough that scanning is free in practice.
 - Strategy detection is pure pattern matching (no AI) over the 15 Schwab strategy categories. `detectStrategy()` returns `null` (not `'Custom'`) when no named pattern matches; `findStrategySubgroups()` then enumerates size 4→2 subsets so a bucket of mixed unrelated trades surfaces only the named sub-strategies and leaves the rest ungrouped.
 
 **Known weirdness:**
@@ -225,5 +228,7 @@ There's no `pnpm dev`, no `pnpm test`, no `pnpm typecheck`. If you reach for one
 - `index.html` has hardcoded version text — don't try to fetch `version.json` at runtime; we tried and reverted (commit 22bd410).
 
 **Known issues we've accepted:**
-- No automated tests. If we ever add a test framework, it needs to run in the browser without a build — likely Mocha + a static page.
+- Automated Node/Playwright tests cover legacy compatibility, atomic writes, imports, aggregation, navigation and PWA. No build or runtime dependency is introduced.
 - prevRpt settings keys (`ltj_prevRptIds_*`) accumulate per-symbol with no cleanup. Acceptable until users complain about IDB size.
+
+Current journal writes for Entry/import/Exit await atomic IndexedDB commit before updating memory. The older fire-and-forget collection APIs remain for compatibility; do not use them for new import writes. Events/Summary/legacy display and aggregation resolve through getResolvedTradeState(), with DB5 and backup v10 unchanged.
