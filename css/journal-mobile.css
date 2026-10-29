@@ -170,3 +170,30 @@ body.journal-simple :focus-visible { outline: 2px solid var(--accent); outline-o
 #exit-update-editor > summary { cursor: pointer; min-height: 44px; padding: 12px 0; font-weight: 600; }
 #update-import-preview { max-width: 100%; }
 .resolved-trade-summary { border-left: 3px solid var(--accent); padding-left: 10px; }
+
+/* Dedicated trade management, shared mobile widths. */
+#trade-detail-overlay { z-index: 205; }
+body.detail-editing #day-overlay { z-index: 215; }
+body.detail-editing #day-summary, body.detail-editing #trade-list, body.detail-editing #add-row-btn { display:none !important; }
+.detail-content { padding:16px; min-width:0; overflow-wrap:anywhere; }
+.trade-detail .modal-hdr > div { min-width:0; }
+.trade-detail h2 { overflow-wrap:anywhere; }
+.event-editor { border:1px solid var(--border);padding:12px;margin-top:16px; }
+.event-editor label { display:block;margin:12px 0; }
+.event-editor input,.event-editor textarea { display:block;width:100%;max-width:100%;box-sizing:border-box; }
+.event-editor pre { white-space:pre-wrap;overflow-wrap:anywhere; }
+.event-actions { display:flex;gap:8px;flex-wrap:wrap;margin:8px 0; }
+.event-actions button,.detail-content button,.period-trade-link { min-height:44px;max-width:100%;white-space:normal; }
+.period-trade { display:block; }
+.period-trade-link { display:flex;flex-direction:column;text-align:left;width:100%;gap:6px;background:transparent;color:inherit;border:0;overflow-wrap:anywhere; }
+.period-heading { grid-column:1/-1; }
+.detail-content button:not(.screenshot-open) {
+  background:var(--surface2, #1e2535);color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:9px 12px;cursor:pointer;margin:4px 4px 4px 0;
+}
+.event-editor input,.event-editor textarea {
+  background:var(--bg);color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:10px;font-family:inherit;color-scheme:dark;
+}
+#event-edit-save { background:var(--accent);color:white; }
+#event-edit-save:disabled { opacity:.45;cursor:default; }

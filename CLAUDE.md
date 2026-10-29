@@ -8,7 +8,7 @@
 
 A privacy-first, browser-only trading journal that runs entirely on the user's machine — no account, no server (for the core journal), no data leaving the browser. All trade and plan data lives in IndexedDB. An optional **Signal Intel** background server (`signal-intel/`) adds local AI-powered news/signal analysis. Marketed as a free replacement for paid SaaS journals (Tradervue, TraderSync, Tradezella).
 
-**Stage:** Production crypto journal (v1.12.0; see `docs/unified-trade-workflow.md`)
+**Stage:** Production crypto journal (v1.13.0; see `docs/trade-detail-management.md`)
 **Primary user:** Crypto trader using ChatGPT text import; legacy options/equities records remain supported who reviews trades daily
 **Success metric:** Daily use — every trade logged, every day's P&L tagged with rules/mistakes
 
@@ -114,8 +114,8 @@ local-trading-journal/
 ## 5. Versioning
 
 Version lives in **four** places that must stay in sync:
-1. `version.json` → `{ "version": "1.12.0" }`
-2. `index.html` → `<div class="logo-version" id="app-version">v1.12.0</div>`
+1. `version.json` → `{ "version": "1.13.0" }`
+2. `index.html` → `<div class="logo-version" id="app-version">v1.13.0</div>`
 
 3. `js/app.js` → `APP_VERSION`
 4. `sw.js` → `CACHE_VERSION` (bump whenever bundled assets change)

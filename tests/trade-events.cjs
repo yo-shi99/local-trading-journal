@@ -24,7 +24,7 @@ const entry = { type: 'Entry', datetime: '2026-10-22T09:00', price: 10, quantity
     await page.evaluate(async t => { await dbPut('trades', t); await _initStorageCore(); }, record);
   }
   async function edit(page, id, field, value) {
-    await page.evaluate(id => editFromTable(id), id);
+    await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(id => (openTradeDetail(id), editTradeEntry('fields')), id);
     await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
     await page.locator(field).fill(value);
     await page.getByRole('button', { name: 'Save Trade', exact: true }).click();

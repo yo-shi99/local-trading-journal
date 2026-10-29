@@ -1,5 +1,7 @@
 # 統一ChatGPT Import・決済状態・Summary・編集navigation（1.12.0）
 
+> v1.13.0の画面・Result判定・編集仕様は[Trade Detail management](trade-detail-management.md)を参照してください。ClosedのResultは保存ラベルより最終実現損益を優先します。
+
 ## 原因と方針
 
 これまで`getTradeState()`はeventsを計算したが、カード、`getPnl()`、`getOpenQty()`、カレンダー、統計は旧フィールドを参照していた。そのためevents上のClosed/-7.6262と、旧Entry情報だけから算出したOpen/0が並存した。

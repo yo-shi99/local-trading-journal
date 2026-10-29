@@ -38,12 +38,8 @@ function cryptoRealizationDate(t) {
 function journalAmount(value, trades) {
   return trades.some(t => isCryptoTrade(t) || hasResolvedTradeState(t)) ? Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 }) : Math.round(Math.abs(value)).toLocaleString('en-US');
 }
-function tradeOutcome(t) {
-  if (hasResolvedTradeState(t)) return getResolvedTradeState(t).result;
-  if (isCryptoTrade(t)) return cryptoRealizationDate(t) ? t.cryptoJournal.result : '';
-  const pnl = getPnl(t);
-  return pnl > 0 ? 'Win' : pnl < 0 ? 'Loss' : 'BE';
-}
+function tradeOutcome(t) { return getResolvedTradeState(t).result; }
+
 function cryptoTradeDates(t) {
   if (hasResolvedTradeState(t)) return getTradeActivityDates(t);
   return [t.date, t.cryptoJournal?.exitAt?.split('T')[0]].filter(Boolean);
@@ -89,9 +85,9 @@ function initCryptoFields() {
     ${cryptoInput('crypto-size', 'ポジションサイズ（銘柄の数量）', 'number', 'min="0"')}
     <p class="crypto-hint">価格と損益は同じ決済通貨で入力してください（例：USDT）。レバレッジ・契約枚数の換算は行いません。</p>
     ${cryptoInput('crypto-pnl', '実現損益（手数料等を含む確定額・未決済は空欄）')}
-    ${cryptoChoices('crypto-result', ['Win', 'Loss', 'BE'], '結果（損益額とは独立・手動変更可）')}
+    ${cryptoChoices('crypto-result', ['Win', 'Loss', 'BE'], '保存ラベル（参考・Closedの結果は損益から自動判定）')}
     <button type="button" id="crypto-result-auto">損益から結果を再判定</button>
-    <p class="crypto-hint">結果を選んでも金額は変わりません。BEでも手数料による損失を保存できます。0の場合は結果を自動選択しません。決済日時と損益額がそろった取引だけ、決済日に集計します。</p>
+    <p class="crypto-hint">保存ラベルは参考値です。Closedの表示・集計は最終実現損益からWin / Loss / BEを自動判定します。Openでは結果を確定しません。</p>
     ${cryptoChoices('crypto-strategy', CRYPTO_STRATEGIES, '戦略タグ（任意）')}
     ${cryptoInput('crypto-strategy-other', 'その他の戦略', 'text')}
     ${cryptoText('crypto-reason', 'エントリー根拠')}
@@ -208,14 +204,15 @@ async function saveCryptoJournalTrade(options = {}) {
     validateScreenshots(trade.screenshots);
     validateTradeEvents(trade.events);
     validateTradeSummary(trade);
-    await dbPut('trades', trade);
+    if(old) await replaceTradeDraftAtomic(trade, tradeEntryDraftRevision);
+    else await dbPut('trades', trade);
     _trades = old ? load().map(t => t.id === trade.id ? trade : t) : [...load(), trade];
     if (generation !== analysisFormGeneration) { renderStats(); renderCalendar(); if (state.view === 'trades') renderTrades(); return trade; }
     hideForm(); clearForm();
     if (!activeWeekStart) activeDate = trade.date;
     refreshCurrentModal(); renderStats(); renderCalendar();
     if (state.view === 'trades') renderTrades();
-    completeTradeEditorNavigation();
+    completeTradeEditorNavigation(trade.id, !old);
     return trade;
   } catch (error) {
     console.error('[TJ] Crypto save failed:', error);
@@ -229,7 +226,7 @@ function cryptoTradeSummary(t) {
   if (!isCryptoTrade(t)) return '';
   const c = t.cryptoJournal;
   if (hasResolvedTradeState(t)) return resolvedTradeSummaryHtml(t);
-  return `<div class="crypto-summary"><strong>${escHtml(c.direction)} · ${escHtml(c.result || '結果未選択')}</strong>
+  return `<div class="crypto-summary"><strong>${escHtml(c.direction)} · ${escHtml(getResolvedTradeState(t).status)} · Legacy · ${escHtml(tradeOutcome(t) || '結果未確定')}</strong>
     ${c.strategy ? `<span class="trade-tag-badge">${escHtml(c.strategy === 'その他' ? c.strategyOther : c.strategy)}</span>` : ''}
     <span>Entry ${escHtml(c.entryAt.replace('T', ' '))} / ${c.entryPrice}</span>
     <span>Exit ${c.exitAt ? escHtml(c.exitAt.replace('T', ' ')) : '未決済／決済日時未登録'}</span>
@@ -238,8 +235,9 @@ function cryptoTradeSummary(t) {
 function cryptoTradeDetails(t) {
   if (!isCryptoTrade(t)) return '';
   const c = t.cryptoJournal;
+  const entry = Array.isArray(t.events) ? t.events.filter(e=>e.type==='Entry').slice().sort((a,b)=>tradeEventTimeKey(a.datetime).localeCompare(tradeEventTimeKey(b.datetime)))[0] : null;
   const text = (label, value) => value ? `<div><strong>${label}</strong><p>${escHtml(value)}</p></div>` : '';
-  const entryInfo = hasResolvedTradeState(t) ? `<div class="crypto-summary"><strong>初期Entry · ${escHtml(c.direction)}</strong><span>Entry ${escHtml(c.entryAt.replace('T', ' '))} / ${c.entryPrice}</span><span>初期SL ${c.stopLossPrice ?? '—'} / 初期TP ${c.takeProfitPrice ?? '—'} / 初期数量 ${c.positionSize}</span><span>戦略 ${escHtml(c.strategy === 'その他' ? c.strategyOther : c.strategy)}</span></div>` : cryptoTradeSummary(t);
+  const entryInfo = hasResolvedTradeState(t) ? `<div class="crypto-summary"><strong>初期Entry · ${escHtml(c.direction)}</strong><span>Entry ${escHtml((entry?.datetime||c.entryAt).replace('T', ' '))} / ${entry?.price??c.entryPrice}</span><span>初期SL ${c.stopLossPrice ?? '—'} / 初期TP ${c.takeProfitPrice ?? '—'} / 初期数量 ${entry?.quantity??c.positionSize}</span><span>戦略 ${escHtml(c.strategy === 'その他' ? c.strategyOther : c.strategy)}</span></div>` : cryptoTradeSummary(t);
   return `<section class="crypto-trade-details"><h3>Entry情報・Entry時分析</h3>${entryInfo}
     ${hasResolvedTradeState(t) ? '' : `<p>実現損益: ${c.realizedPnl ?? '未入力'}（手入力・${cryptoRealizationDate(t) ? '決済日集計' : '決済日時または金額未登録のため集計対象外'}）</p>`}
     ${c.analysisText ? `<details class="crypto-details"><summary>ChatGPT解析テキスト（原文）</summary><pre class="analysis-original">${escHtml(c.analysisText)}</pre></details>` : ''}

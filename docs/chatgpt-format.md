@@ -1,4 +1,6 @@
-# ChatGPT正式貼り付け仕様（アプリ1.12.0）
+# ChatGPT正式貼り付け仕様（アプリ1.13.0）
+
+> v1.13.0の画面・Result判定・編集仕様は[Trade Detail management](trade-detail-management.md)を参照してください。ClosedのResultは保存ラベルより最終実現損益を優先します。
 
 現行の入力導線・Summary・共通集計・戻る操作は[統一ワークフロー](unified-trade-workflow.md)を参照。New Entryと既存4種類のテキスト形式は引き続き有効で、Final Summaryが追加される。
 
@@ -195,7 +197,7 @@ Final Exitの理由・メモ・振り返り・結果は既存の`exitUpdate.reas
 - event・raw・Exit分析/レビュー・今回画像は同じreadwriteトランザクションの単一trade保存。失敗時は全体ロールバック。Entry情報・Entry原文・既存画像を変更しない。
 - Entry追加画像の初期categoryはEntry。更新はUpdate、Final ExitはExit。更新画像のcategoryは利用者が変更可能。categoryなし旧画像はそのまま維持。
 - DB5、store構成、バックアップv10を維持。新任意項目・原文・events・Exit情報・画像category/BlobはJSON復元まで保持。旧バックアップも継続対応。読み取りmigration・既存レコードの自動更新・DB自動削除なし。
-- PWA静的キャッシュは1.12.0へ更新。IDBデータ/BlobはSWキャッシュ対象外。更新反映は既存タブ/アプリを閉じて再起動。GitHub Pages配下URLを継続。
+- PWA静的キャッシュは1.13.0へ更新。IDBデータ/BlobはSWキャッシュ対象外。更新反映は既存タブ/アプリを閉じて再起動。GitHub Pages配下URLを継続。
 
 ## テスト
 

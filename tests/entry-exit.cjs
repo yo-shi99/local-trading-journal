@@ -33,12 +33,12 @@ const event = (type, quantity, i = 0, price = 80000, realizedPnl = 0) => ({ id: 
     return page.evaluate(() => load()[0].id);
   }
   async function edit(page, id) {
-    await page.evaluate(id => editFromTable(id), id);
+    await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(id => (openTradeDetail(id), editTradeEntry('fields')), id);
     await page.waitForFunction(() => editingId !== null && document.getElementById('trade-form').style.display === 'block');
     assert.equal(await page.locator('#exit-update-editor').isVisible(), true);
   }
   async function snapshot(page) { return page.evaluate(async () => screenshotsForBackup(await dbSnapshot())); }
-  async function show(page) { await page.evaluate(() => openDay(load()[0].date)); }
+  async function show(page) { await page.evaluate(() => openTradeDetail(load()[0].id)); }
   async function attachEvents(page, events) {
     await page.evaluate(async events => { const t = structuredClone(load()[0]); t.events = events; await dbPut('trades', t); await _initStorageCore(); }, events);
   }
@@ -49,7 +49,7 @@ const event = (type, quantity, i = 0, price = 80000, realizedPnl = 0) => ({ id: 
   try {
     await test('legacy display/edit/save/reload/backup/restore adds no events or Exit metadata', async page => {
       const id = await create(page, true); const before = (await snapshot(page)).trades[0];
-      await show(page); assert.equal(await page.locator('.trade-events-panel').count(), 0); assert.equal(await page.locator('.trade-state-panel').count(), 0);
+      await show(page); assert.equal(await page.locator('.trade-events-panel .trade-event-card').count(), 0); assert.ok((await page.locator('.trade-state-panel').innerText()).includes('Legacy'));
       assert.ok((await page.locator('.crypto-trade-details').innerText()).includes('元の振り返り'));
       await edit(page, id); await page.locator('#crypto-review').fill('従来欄を編集');
       await page.getByRole('button', { name: 'Save Trade', exact: true }).click();

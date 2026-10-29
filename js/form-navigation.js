@@ -6,7 +6,7 @@ let tradeEditorHistoryClosing = false;
 
 function captureTradeEditorReturn() {
   return { overlayOpen: document.getElementById('day-overlay').classList.contains('open'),
-    activeDate, activeWeekStart, activeWeekEnd };
+    activeDate, activeWeekStart, activeWeekEnd, title: document.getElementById('modal-title').textContent, subtitle: document.getElementById('modal-sub').textContent, detailId: typeof activeTradeDetailId !== 'undefined' ? activeTradeDetailId : null };
 }
 function prepareTradeEditorNavigation() {
   if (!tradeEditorNavigation && !tradeEditorReturn) tradeEditorReturn = captureTradeEditorReturn();
@@ -26,9 +26,12 @@ function beginTradeEditorNavigation() {
 }
 function hasTradeEditorNavigation() { return Boolean(tradeEditorNavigation || tradeEditorReturn); }
 function restoreTradeEditorReturn(returnTo) {
+  document.body.classList.remove('detail-editing');
   if (!returnTo) return;
+  document.getElementById('modal-title').textContent=returnTo.title;document.getElementById('modal-sub').textContent=returnTo.subtitle;
   activeDate = returnTo.activeDate; activeWeekStart = returnTo.activeWeekStart; activeWeekEnd = returnTo.activeWeekEnd;
   const overlay = document.getElementById('day-overlay');
+  if (returnTo.detailId) { overlay.classList.remove('open'); renderTradeDetail(); return; }
   if (returnTo.overlayOpen) { refreshCurrentModal(); overlay.classList.add('open'); }
   else overlay.classList.remove('open');
 }
@@ -43,10 +46,19 @@ function discardTradeEditorNavigation(consumeHistory = true) {
     history.back();
   }
 }
-function completeTradeEditorNavigation() { discardTradeEditorNavigation(); }
+let savedTradeDetailPending = null;
+function completeTradeEditorNavigation(savedId, isNew = false) {
+  const newTrade = savedId && (isNew || !tradeEditorNavigation?.returnTo.detailId);
+  discardTradeEditorNavigation();
+  if (newTrade) {
+    if (tradeEditorHistoryClosing) savedTradeDetailPending = savedId;
+    else openTradeDetail(savedId);
+  }
+}
 window.addEventListener('popstate', event => {
   if (tradeEditorHistoryClosing) {
     tradeEditorHistoryClosing = false;
+    if (savedTradeDetailPending) { const id = savedTradeDetailPending; savedTradeDetailPending = null; setTimeout(() => openTradeDetail(id), 0); }
     // A fast subsequent open is queued until the previous editor entry is consumed.
     if (tradeEditorNavigation) pushTradeEditorHistory();
     return;

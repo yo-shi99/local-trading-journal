@@ -1,5 +1,7 @@
 # eventsからの取引状態計算（第2段階）
 
+> v1.13.0の画面・Result判定・編集仕様は[Trade Detail management](trade-detail-management.md)を参照してください。ClosedのResultは保存ラベルより最終実現損益を優先します。
+
 > 現行1.12.0では[統一ワークフロー](unified-trade-workflow.md)が入力導線・表示集計・Summary・navigationの仕様を更新しています。以下は各段階の保存／計算基盤の記録です。
 
 `js/trade-state.js` の純粋計算と読み取りAPI。計算結果を取引レコードへ保存せず、IndexedDB・画像Blob・ChatGPT解析原文・旧Entry/Exit項目に書き込まない。
