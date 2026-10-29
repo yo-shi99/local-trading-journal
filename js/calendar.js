@@ -30,14 +30,14 @@ function renderCalendar() {
   for (const t of trades) {
     const realizations = getRealizationsByDate(t);
     const riskByDate = getRiskByDate(t);
-    const realizationDates = Object.keys(realizations);
-    // A trade is a full close only if all P&L lands on one date and nothing remains open
-    const isFullClose = realizationDates.length === 1 && getOpenQty(t) <= 0;
+    // The final close date is independent of earlier partial realization dates.
+    const resolved=getResolvedTradeState(t),closedDate=resolved.isValid&&resolved.status==='Closed'?resolved.lastExitDatetime?.split('T')[0]:null;
+    if(closedDate&&!Object.hasOwn(realizations,closedDate))realizations[closedDate]=0;
     for (const [date, pnl] of Object.entries(realizations)) {
       if (!map[date]) map[date] = { pnl: 0, risk: 0, fullCount: 0, partialCount: 0 };
       map[date].pnl  += pnl;
       map[date].risk += riskByDate[date] || 0;
-      if (isFullClose) map[date].fullCount   += 1;
+      if (date === closedDate) map[date].fullCount   += 1;
       else             map[date].partialCount += 1;
       if (date.startsWith(monthPrefix)) {
         monthlyPnl  += pnl;
@@ -50,9 +50,8 @@ function renderCalendar() {
   const takenMap = {};
   for (const t of trades) {
     if (hasResolvedTradeState(t) && !getResolvedTradeState(t).isValid) continue;
-    const firstBuy = isCryptoTrade(t) ? t.legs?.[0] : (t.legs && t.legs.length ? t.legs.find(l => l.action === 'buy') : null);
-    if (!firstBuy) continue; // legacy trades have no separate entry date (open = close = t.date)
-    const entryDate = firstBuy.date ? firstBuy.date.split('T')[0] : t.date;
+    const entryDate = getTradeEntryDatetime(t).split('T')[0];
+    if(!entryDate)continue;
     const realizations = getRealizationsByDate(t);
     // Only show on entry day if it was NOT closed on that same day
     if (!Object.prototype.hasOwnProperty.call(realizations, entryDate)) {

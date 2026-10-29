@@ -1,6 +1,6 @@
 const state = { view: 'calendar', tradesVisited: false };
 
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.13.0';
 
 // Presentation-only mode: remove the body class to restore the original interface.
 function isSimpleJournal() { return document.body.classList.contains('journal-simple'); }
@@ -71,11 +71,12 @@ function switchView(v) {
 }
 
 function openAddGlobal() {
+  document.body.classList.add('detail-editing');
   const navigationTicket = prepareTradeEditorNavigation();
   activeDate = todayStr();
   editingId  = null;
   const dt = new Date();
-  document.getElementById('modal-title').textContent = 'Add Trade';
+  document.getElementById('modal-title').textContent = 'New Trade';
   document.getElementById('modal-sub').textContent   = dt.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
   hideForm();
   refreshDayModal();
@@ -83,14 +84,7 @@ function openAddGlobal() {
   setTimeout(() => { if (isTradeEditorOpenTicket(navigationTicket)) showForm(null); }, 50);
 }
 
-function editFromTable(id) {
-  const t = load().find(x => x.id === id);
-  if (!t) return;
-  const navigationTicket = prepareTradeEditorNavigation();
-  activeDate = t.date;
-  openDay(t.date);
-  setTimeout(() => { if (isTradeEditorOpenTicket(navigationTicket)) showForm(id); }, 60);
-}
+function editFromTable(id) { openTradeDetail(id); }
 
 // ─── CSV TEMPLATE & IMPORT ───
 

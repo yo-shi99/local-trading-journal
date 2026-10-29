@@ -82,8 +82,8 @@ function renderTrades() {
   let trades = applyGlobalFilter(load());
 
   trades.sort((a, b) => {
-    let va = sortField === 'pnl' ? getPnl(a) : (a[sortField] ?? '');
-    let vb = sortField === 'pnl' ? getPnl(b) : (b[sortField] ?? '');
+    let va = sortField === 'pnl' ? getPnl(a) : sortField === 'date' ? getTradeEntryDatetime(a) : (a[sortField] ?? '');
+    let vb = sortField === 'pnl' ? getPnl(b) : sortField === 'date' ? getTradeEntryDatetime(b) : (b[sortField] ?? '');
     if (va < vb) return sortDir === 'asc' ? -1 : 1;
     if (va > vb) return sortDir === 'asc' ?  1 : -1;
     return 0;
@@ -117,10 +117,10 @@ function renderTrades() {
   tbody.innerHTML = trades.map((t, i) => {
     const pnl    = getPnl(t);
     const pnlCls = pnl >= 0 ? 'pos' : 'neg';
-    const resolved = hasResolvedTradeState(t) ? getResolvedTradeState(t) : null;
-    const pnlStr = resolved && !resolved.isValid ? '—' : (pnl >= 0 ? '+$' : '-$') + (isCryptoTrade(t) || resolved ? journalAmount(pnl, [t]) : Math.abs(pnl).toFixed(2));
+    const resolved = getResolvedTradeState(t);
+    const pnlStr = resolved && !resolved.isValid ? '—' : (pnl >= 0 ? '+$' : '-$') + (isCryptoTrade(t) || hasResolvedTradeState(t) ? journalAmount(pnl, [t]) : Math.abs(pnl).toFixed(2));
     const pnlPct = getPnlPct(t);
-    const [y, m, d] = t.date.split('-');
+    const [y, m, d] = getTradeEntryDatetime(t).split('T')[0].split('-');
     const dateStr = `${m}/${d}/${y}`;
     const typeLbl = t.type === 'option'
       ? `<span class="badge b-option">${(t.optionType||'OPT').toUpperCase()} $${t.strikePrice||'?'}</span>

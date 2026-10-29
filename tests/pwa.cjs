@@ -101,7 +101,7 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     await page.evaluate(id => appendTradeEvent(id, { type: 'Add Entry', datetime: '2026-10-22T11:00',
       price: 64000, quantity: 0.005, realizedPnl: null, reason: '', memo: 'offline' }), id);
     await page.locator('#nav-trades').click(); assert.ok((await page.locator('#trades-body').innerText()).includes('BTC'));
-    await page.evaluate(id => editFromTable(id), id);
+    await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(id => (openTradeDetail(id), editTradeEntry('fields')), id);
     await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
     const updateText = '更新種別: Partial TP\n日時: 2026-10-22 12:00:04\n価格: 66000\n数量: 0.001 BTC\n実現損益: 0 USDT\n理由: offline update';
     await page.setInputFiles('#update-import-input', { name: 'offline-update.png', mimeType: 'image/png', buffer: image });
@@ -111,13 +111,14 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     await page.waitForFunction(() => updateImportPending !== null);
     await page.locator('#update-import-confirm').click();
     await page.waitForFunction(() => load()[0].events.length === 3 && document.getElementById('trade-form').style.display === 'none');
-    await page.evaluate(id => editFromTable(id), id);
+    await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(id => (openTradeDetail(id), editTradeEntry('fields')), id);
     await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
     await page.locator('#crypto-review').fill('オフラインで編集');
     await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
     await page.waitForFunction(() => load()[0].cryptoJournal.review === 'オフラインで編集');
     await page.evaluate(() => closeModal());
-    await page.evaluate(() => openDay(load()[0].date));
+    await page.evaluate(() => openTradeDetail(load()[0].id));
+    await page.locator('.trade-screenshots').scrollIntoViewIfNeeded();
     await page.waitForFunction(() => document.querySelector('.trade-screenshots img')?.naturalWidth === 1600);
     await page.locator('.trade-screenshots .screenshot-open').last().click();
     await page.waitForFunction(() => document.getElementById('screenshot-full').naturalWidth === 1600);
@@ -139,7 +140,7 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     // Exercise the new Final Exit analysis through the existing preview/confirm UI while offline.
     const ethId = await page.evaluate(() => load().find(t => t.symbol === 'ETH').id);
     const ethEntry = await page.evaluate(() => structuredClone(load().find(t => t.symbol === 'ETH').cryptoJournal));
-    await page.evaluate(id => editFromTable(id), ethId);
+    await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(id => (openTradeDetail(id), editTradeEntry('fields')), ethId);
     const ethExitText = `更新種別: Final Exit\n決済日時: ${ethEntry.entryAt}\nExit価格: 2501\n決済数量: 0.1 ETH\n実現損益: 0\nExit時Futures CVD: offline exit futures\nExit時Spot CVD: offline exit spot\n振り返り: offline final review`;
     await page.locator('#update-import-text').fill(ethExitText);
     await page.locator('#update-import-analyse').click();
@@ -150,10 +151,14 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     assert.deepEqual(await page.evaluate(() => load().find(t => t.symbol === 'ETH').cryptoJournal), ethEntry);
     assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').exitUpdate.analysis.exitSpotCvd), 'offline exit spot');
     assert.equal(await page.evaluate(() => getTradeState(load().find(t => t.symbol === 'ETH')).status), 'Closed');
+    // The same atomic edit API must remain usable from the cached app offline.
+    await page.evaluate(async id=>{const t=await dbGet('trades',id),e=t.events[0];await mutateTradeHistory(id,e.id,{event:{...e,reason:'offline edited event'}},updateImportRevision(t));},ethId);
+    await page.reload();await page.waitForFunction(()=>load().length===2);
+    assert.equal(await page.evaluate(id=>load().find(t=>t.id===id).events[0].reason,ethId),'offline edited event');
     const priorFullState = await page.evaluate(id => getResolvedTradeState(load().find(t => t.id === id)), id);
     assert.ok(Math.abs(priorFullState.remainingQuantity - .014) < 1e-12);
     assert.ok(Math.abs(priorFullState.averageEntryPrice - 64666.666666666664) < 1e-8);
-    await page.evaluate(id => editFromTable(id), id);
+    await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(id => (openTradeDetail(id), editTradeEntry('fields')), id);
     await page.waitForFunction(() => editingId !== null && document.getElementById('trade-form').style.display === 'block');
     const summaryText = '更新種別: Final Summary\n決済日時: 2026-10-22 12:01:04\n実現損益: 25.5 USDT\n結果: Win';
     await page.locator('#update-import-text').fill(summaryText);

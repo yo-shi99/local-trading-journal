@@ -118,7 +118,7 @@ function computeStats(trades) {
     totalPnl += p;
     if (tradeOutcome(t) === 'Win') wins++;
     if (tradeOutcome(t) === 'Loss') losses++;
-    const settled = !hasResolvedTradeState(t) || getResolvedTradeState(t).status === 'Closed';
+    const settled = getResolvedTradeState(t).status === 'Closed';
     if (settled && p > 0) { positivePnlCount++; grossWin += p; }
     if (settled && p < 0) { negativePnlCount++; grossLoss += Math.abs(p); }
     // Use sell dates for best/worst day calculation
@@ -130,7 +130,7 @@ function computeStats(trades) {
   const days     = Object.values(byDate);
   const bestDay  = days.length ? Math.max(...days) : null;
   const worstDay = days.length ? Math.min(...days) : null;
-  const classified = trades.filter(t => hasResolvedTradeState(t) ? ['Win', 'Loss', 'BE'].includes(tradeOutcome(t)) : !isCryptoTrade(t) || ['Win', 'Loss', 'BE'].includes(tradeOutcome(t))).length;
+  const classified = trades.filter(t => ['Win', 'Loss', 'BE'].includes(tradeOutcome(t))).length;
   const winRate = classified ? ((wins / classified) * 100).toFixed(1) : '0.0';
   const avgWin   = positivePnlCount ? (trades.some(t => isCryptoTrade(t) || hasResolvedTradeState(t)) ? grossWin / positivePnlCount : Math.round(grossWin / positivePnlCount)).toLocaleString('en-US', { maximumFractionDigits: 8 })   : null;
   const avgLoss  = negativePnlCount ? (trades.some(t => isCryptoTrade(t) || hasResolvedTradeState(t)) ? grossLoss / negativePnlCount : Math.round(grossLoss / negativePnlCount)).toLocaleString('en-US', { maximumFractionDigits: 8 }) : null;
@@ -225,4 +225,49 @@ function getPnlPct(t) {
   const closedRisk = Object.values(getRiskByDate(t)).reduce((s, r) => s + r, 0);
   if (!closedRisk) return null;
   return (getPnl(t) / closedRisk) * 100;
+}
+
+function getTradeSummary(t) {
+  if (hasResolvedTradeState(t)) { const s = getResolvedTradeState(t); return { avgEntry: s.averageEntryPrice, avgExit: s.lastExitPrice, entryTime: getLegacyEntryBaseline(t)?.datetime, exitTime: s.lastExitDatetime }; }
+  if (!t.legs || !t.legs.length) return {};
+  const mult     = t.type === 'option' ? 100 : 1;
+  const buyLegs  = t.legs.filter(l => l.action === 'buy');
+  const sellLegs = t.legs.filter(l => l.action === 'sell');
+
+  const totalBuyQty  = buyLegs.reduce((s, l)  => s + (parseFloat(l.quantity) || 0), 0);
+  const totalSellQty = sellLegs.reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0);
+
+  const avgEntry = totalBuyQty > 0
+    ? buyLegs.reduce((s, l) => s + (parseFloat(l.price) || 0) * (parseFloat(l.quantity) || 0), 0) / totalBuyQty
+    : null;
+  const avgExit = totalSellQty > 0
+    ? sellLegs.reduce((s, l) => s + (parseFloat(l.price) || 0) * (parseFloat(l.quantity) || 0), 0) / totalSellQty
+    : null;
+
+  const entryTime = buyLegs.length  > 0 ? buyLegs[0].date                     : null;
+  const exitTime  = sellLegs.length > 0 ? sellLegs[sellLegs.length - 1].date  : null;
+
+  let initialTarget = null;
+  if (avgEntry !== null && t.profitTargets && t.profitTargets.length) {
+    initialTarget = t.profitTargets.reduce((s, pt) => {
+      return s + ((parseFloat(pt.price) || 0) - avgEntry) * (parseFloat(pt.qty) || 0) * mult;
+    }, 0);
+  }
+
+  let tradeRisk = null;
+  if (avgEntry !== null && t.stopLoss && t.stopLoss.length) {
+    tradeRisk = t.stopLoss.reduce((s, sl) => {
+      return s + ((parseFloat(sl.price) || 0) - avgEntry) * (parseFloat(sl.qty) || 0) * mult;
+    }, 0);
+  }
+
+  const plannedR = (initialTarget !== null && tradeRisk !== null && tradeRisk !== 0)
+    ? initialTarget / Math.abs(tradeRisk)
+    : null;
+  const realizedPnl = getPnl(t);
+  const realizedR   = (tradeRisk !== null && tradeRisk !== 0)
+    ? realizedPnl / Math.abs(tradeRisk)
+    : null;
+
+  return { avgEntry, avgExit, entryTime, exitTime, initialTarget, tradeRisk, plannedR, realizedR };
 }

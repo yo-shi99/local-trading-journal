@@ -40,7 +40,7 @@ const events = [
       assert.equal(s.source, 'legacy'); assert.equal(s.averageEntryPrice, 10); assert.equal(s.remainingQuantity, 2);
       assert.equal(s.realizedPnl, await page.evaluate(() => getPnl(load()[0])));
       assert.equal(s.status, 'Open');
-      await page.evaluate(() => editFromTable(load()[0].id));
+      await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(() => (openTradeDetail(load()[0].id), editTradeEntry('fields')));
       await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
       await page.locator('#f-notes').fill('edited'); await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
       await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'none'); await page.evaluate(() => closeModal());

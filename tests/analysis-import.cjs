@@ -83,7 +83,7 @@ TPO / Market Profile: Poor Lowあり
       assert.equal(record.cryptoJournal.orderFlow.oi, '上昇');
       assert.equal(record.cryptoJournal.orderFlow.footprint, '上部でBuy Absorption');
       assert.equal(record.cryptoJournal.orderFlow.imbalance, 'Sell Imbalanceあり');
-      await page.evaluate(() => editFromTable(load()[0].id));
+      await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(() => (openTradeDetail(load()[0].id), editTradeEntry('fields')));
       await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
       assert.equal(await page.locator('#crypto-analysis-text').inputValue(), full);
       assert.equal(await page.locator('#crypto-entry-price').inputValue(), '64999');
@@ -109,7 +109,7 @@ TPO / Market Profile: Poor Lowあり
       assert.equal(await page.locator('#crypto-sl').inputValue(), '');
       await save(page);
       assert.equal(await page.evaluate(() => load()[0].cryptoJournal.analysisText), text);
-      await page.evaluate(() => openDay(load()[0].date));
+      await page.evaluate(() => openTradeDetail(load()[0].id));
       const details = page.locator('.crypto-trade-details details').filter({ has: page.locator('summary', { hasText: '原文' }) });
       await details.locator('summary').click();
       assert.ok((await details.innerText()).includes('<img src=x onerror=alert(1)>'));
@@ -167,7 +167,7 @@ TPO / Market Profile: Poor Lowあり
       const text = '不明指標: メモ\n続きの文章'; await apply(page, text); await save(page);
       await page.evaluate(async () => { const t = structuredClone(load()[0]); delete t.cryptoJournal.analysisText; await dbPut('trades', t); });
       await page.reload(); await page.waitForFunction(() => load().length === 1);
-      await page.evaluate(() => editFromTable(load()[0].id)); await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
+      await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(() => (openTradeDetail(load()[0].id), editTradeEntry('fields'))); await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
       assert.equal(await page.locator('#crypto-analysis-text').inputValue(), '');
       await save(page);
     });

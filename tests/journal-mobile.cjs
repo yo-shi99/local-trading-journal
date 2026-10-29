@@ -51,7 +51,7 @@ const baseline = process.env.BASELINE === '1';
       assert.deepEqual(await page.evaluate(() => [load()[0].tags.length, load()[0].mistakes.length, load()[0].rules.length]), [1, 1, 1]);
       await page.locator('#nav-trades').click();
       if (!baseline) await noOverflow(page);
-      await page.locator('#trades-body button[title=Edit]').click();
+      await page.locator('#trades-body button[title=Edit]').click(); await page.locator('[data-detail-action=entry]').click();
       await page.locator('#f-notes').fill('edited');
       await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
       await page.evaluate(() => closeModal());
@@ -123,7 +123,7 @@ const baseline = process.env.BASELINE === '1';
           assert.equal(await page.evaluate(() => state.view), 'calendar');
         }
         await page.locator('#nav-trades').click();
-        await page.locator('#trades-body button[title=Edit]').click();
+        await page.locator('#trades-body button[title=Edit]').click(); await page.locator('[data-detail-action=entry]').click();
         assert.equal(await page.locator('#opt-fields').isVisible(), false);
         await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
         await page.evaluate(() => closeModal());

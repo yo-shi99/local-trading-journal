@@ -138,7 +138,7 @@ function getTradeState(trade) {
     closedQuantity: totalEntryQuantity - remainingQuantity, remainingQuantity,
     rawRemainingQuantity: remainingQuantity, realizedPnl: getPnl(trade),
     status: remainingQuantity > 0 ? 'Open' : 'Closed',
-    lastExitDatetime: crypto ? crypto.exitAt || null : summary.exitTime ?? trade.exitAt ?? null,
+    lastExitDatetime: crypto ? crypto.exitAt || null : summary.exitTime ?? trade.exitAt ?? trade.date ?? null,
     lastExitPrice: crypto ? null : sells.length ? Number(sells[sells.length - 1].price) :
       Number.isFinite(legacyExitPrice) ? legacyExitPrice : null,
     addEntryCount: null, partialTpCount: null, partialSlCount: null,
@@ -179,13 +179,9 @@ function getResolvedTradeState(trade) {
     totalEntryQuantity: null, averageEntryPrice: null, closedQuantity: null, remainingQuantity: null,
     realizedPnl: null, lastExitDatetime: null, lastExitPrice: null, result: '', epsilon: 0 }; }
   const s = getTradeState(trade);
-  if (s.source === 'summary') return s;
-  const result = s.source === 'events'
-    ? s.isValid && s.status === 'Closed'
-      ? trade.exitUpdate?.result || (s.realizedPnlEventCount ? s.realizedPnl > 0 ? 'Win' : s.realizedPnl < 0 ? 'Loss' : 'BE' : '') : ''
-    : isCryptoTrade(trade) ? (cryptoRealizationDate(trade) ? trade.cryptoJournal.result : '')
-      : s.realizedPnl > 0 ? 'Win' : s.realizedPnl < 0 ? 'Loss' : 'BE';
-  return { ...s, historyMode: s.source === 'events' ? 'full' : 'legacy', result };
+  const result = s.isValid && s.status === 'Closed' && Number.isFinite(s.realizedPnl)
+    ? s.realizedPnl > 0 ? 'Win' : s.realizedPnl < 0 ? 'Loss' : 'BE' : '';
+  return { ...s, historyMode: s.source === 'summary' ? 'summary' : s.source === 'events' ? 'full' : 'legacy', result };
 }
 function getResolvedRealizations(trade) {
   const s = getResolvedTradeState(trade);
@@ -200,10 +196,15 @@ function getResolvedRealizations(trade) {
   }
   return Object.fromEntries(Object.entries(dates).map(([date, values]) => [date, eventStateSum(values)]));
 }
+function getTradeEntryDatetime(trade) {
+  const explicit = Array.isArray(trade.events) ? trade.events.filter(e=>e.type==='Entry').slice().sort((a,b)=>a.datetime.localeCompare(b.datetime))[0] : null;
+  return explicit?.datetime || trade.cryptoJournal?.entryAt || getLegacyEntryBaseline(trade)?.datetime || trade.date || '';
+}
+
 function getTradeActivityDates(trade) {
   if (!hasResolvedTradeState(trade)) return isCryptoTrade(trade) ? cryptoTradeDates(trade) :
     [...new Set([trade.date, ...(trade.legs || []).map(leg => leg.date?.split('T')[0])].filter(Boolean))];
   const s = getResolvedTradeState(trade);
-  return [...new Set([trade.date, ...(Array.isArray(trade.events) ? trade.events : []).map(event => event?.datetime?.split('T')[0]),
+  return [...new Set([getTradeEntryDatetime(trade).split('T')[0], ...(Array.isArray(trade.events) ? trade.events : []).map(event => event?.datetime?.split('T')[0]),
     s.lastExitDatetime?.split('T')[0]].filter(Boolean))];
 }

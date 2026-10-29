@@ -40,7 +40,7 @@ ROE: -3.96%
     await page.waitForFunction(() => load().length === 1 && document.getElementById('trade-form').style.display === 'none');
     await page.evaluate(() => closeModal()); return page.evaluate(() => load()[0].id);
   }
-  async function edit(page, id) { await page.evaluate(id => editFromTable(id), id); await page.waitForFunction(() => editingId !== null && document.getElementById('trade-form').style.display === 'block'); }
+  async function edit(page, id) { await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(id => (openTradeDetail(id), editTradeEntry('fields')), id); await page.waitForFunction(() => editingId !== null && document.getElementById('trade-form').style.display === 'block'); }
   async function analyse(page, raw) {
     await page.locator('#update-import-text').fill(raw); await page.locator('#update-import-analyse').click();
     await page.waitForFunction(() => document.getElementById('update-import-status').textContent !== '解析しています…');
@@ -49,7 +49,7 @@ ROE: -3.96%
     assert.equal(await page.locator('#update-import-confirm').isEnabled(), true);
     await page.locator('#update-import-confirm').click();
     await page.waitForFunction(count => load()[0].events?.length === count && document.getElementById('trade-form').style.display === 'none', count);
-    await page.evaluate(() => openDay(load()[0].date));
+    await page.evaluate(() => openTradeDetail(load()[0].id));
   }
   async function snapshot(page) { return page.evaluate(async () => screenshotsForBackup(await dbSnapshot())); }
   async function commit(page, id, raw, images = []) {
@@ -190,7 +190,7 @@ ROE: -3.96%
       const id = await create(page);
       await page.evaluate(async () => { const t = structuredClone(load()[0]); t.id = 'other'; t.symbol = 'ETH'; await dbPut('trades', t); await _initStorageCore(); });
       await edit(page, id); await analyse(page, text()); const before = await snapshot(page);
-      await edit(page, 'other'); assert.equal(await page.locator('#update-import-text').inputValue(), ''); assert.equal(await page.locator('#update-import-confirm').isEnabled(), false);
+      await page.evaluate(()=>cancelForm()); await page.waitForFunction(()=>!tradeEditorHistoryClosing); await edit(page, 'other'); assert.equal(await page.locator('#update-import-text').inputValue(), ''); assert.equal(await page.locator('#update-import-confirm').isEnabled(), false);
       await page.evaluate(() => confirmUpdateImport()); assert.deepEqual(await snapshot(page), before);
       assert.ok((await page.locator('#update-import-target').innerText()).includes('ETH'));
     });

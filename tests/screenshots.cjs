@@ -41,7 +41,7 @@ const fs = require('node:fs/promises');
     await page.evaluate(() => closeModal());
   }
   async function edit(page) {
-    await page.evaluate(() => editFromTable(load()[0].id));
+    await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(() => (openTradeDetail(load()[0].id), editTradeEntry('fields')));
     await page.waitForFunction(() => document.getElementById('trade-form').style.display === 'block');
   }
   try {
@@ -58,7 +58,7 @@ const fs = require('node:fs/promises');
       await save(page); await page.reload(); await page.waitForFunction(() => load().length === 1);
       assert.equal(await page.evaluate(async () => { const t = await dbGet('trades', load()[0].id); return t.screenshots[0].blob instanceof Blob && t.screenshots[0].dataUrl === undefined; }), true);
       assert.deepEqual(await page.evaluate(async () => (await screenshotsForBackup({ trades: load() })).trades[0].screenshots), draft);
-      await page.evaluate(() => openDay(load()[0].date));
+      await page.evaluate(() => openTradeDetail(load()[0].id));
       await page.locator('.trade-screenshots .screenshot-open').click();
       assert.equal(await page.locator('#screenshot-viewer').isVisible(), true);
       assert.equal(await page.locator('#screenshot-full').evaluate(img => img.complete && img.naturalWidth === 1600), true);
@@ -185,7 +185,7 @@ const fs = require('node:fs/promises');
       });
       await page.reload(); await page.waitForFunction(() => load().length === 1);
       assert.equal(await page.evaluate(() => typeof load()[0].screenshots[0].dataUrl), 'string');
-      await page.evaluate(() => openDay(load()[0].date));
+      await page.evaluate(() => openTradeDetail(load()[0].id));
       const img = page.locator('.trade-screenshots .screenshot-open img');
       assert.ok((await img.getAttribute('src')).startsWith('blob:'));
       await page.waitForFunction(() => document.querySelector('.trade-screenshots img').naturalWidth === 1600);
@@ -218,7 +218,7 @@ const fs = require('node:fs/promises');
       assert.ok(draftUrl.startsWith('blob:'));
       await save(page);
       await page.waitForFunction(url => urlAudit.revoked.includes(url), draftUrl);
-      await page.evaluate(() => openDay(load()[0].date));
+      await page.evaluate(() => openTradeDetail(load()[0].id));
       const detailUrl = await page.locator('.trade-screenshots img').getAttribute('src');
       await page.locator('.trade-screenshots .screenshot-open').click();
       const previewUrl = await page.locator('#screenshot-full').getAttribute('src');
