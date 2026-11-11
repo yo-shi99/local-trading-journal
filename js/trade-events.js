@@ -14,6 +14,7 @@ function validateTradeEvents(events) {
     if (!event || typeof event !== 'object' || Array.isArray(event) ||
         typeof event.id !== 'string' || !event.id.trim() || ids.has(event.id) ||
         !TRADE_EVENT_TYPES.includes(event.type) || !validTradeEventDateTime(event.datetime) ||
+        (event.fee !== undefined && event.fee !== null && (!['Partial TP','Partial SL','Final Exit'].includes(event.type) || !Number.isFinite(event.fee) || event.fee < 0)) ||
         (event.rawText !== undefined && typeof event.rawText !== 'string') ||
         !Number.isFinite(event.price) || event.price <= 0 ||
         !Number.isFinite(event.quantity) || event.quantity <= 0 ||

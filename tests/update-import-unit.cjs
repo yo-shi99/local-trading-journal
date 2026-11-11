@@ -87,8 +87,8 @@ test('same fact duplicate detected across minute / second-zero precision', () =>
   assert.ok(preview(trade, text()).errors.some(e => e.includes('重複')));
 });
 test('preview never modifies Entry or history', () => { const before = structuredClone(base); preview(base, actual); assert.deepEqual(base, before); });
-test('event seconds validation is separate from Entry minute validator', () => {
+test('Entry and event validators both preserve seconds', () => {
   ctx.dateFixture = '2026-10-26T17:41:04'; assert.equal(vm.runInContext('validTradeEventDateTime(dateFixture)', ctx), true);
-  assert.equal(vm.runInContext('validCryptoDateTime(dateFixture)', ctx), false);
+  assert.equal(vm.runInContext('validCryptoDateTime(dateFixture)', ctx), true);
 });
 console.log(`${passed} tests passed`);

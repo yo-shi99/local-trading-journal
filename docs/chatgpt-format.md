@@ -1,4 +1,6 @@
-# ChatGPT正式貼り付け仕様（アプリ1.13.0）
+# ChatGPT正式貼り付け仕様（アプリ1.14.0）
+
+> v1.14.0ではEntry日時の秒保持と、決済eventの任意「手数料:」に対応。[日時・Gross/Fee/Net仕様](entry-datetime-and-fees.md)を参照。
 
 > v1.13.0の画面・Result判定・編集仕様は[Trade Detail management](trade-detail-management.md)を参照してください。ClosedのResultは保存ラベルより最終実現損益を優先します。
 
@@ -51,7 +53,7 @@ Invalidation条件: 81302回復
 ```
 
 新規保存時は銘柄・方向・有効なEntry日時・正のEntry価格・正の数量が必須。貼付けで不足しても原文を残し、フォームで補完できる。SL/TP/戦略/分析/根拠/振り返りは任意。
-Entry日時は分単位、ローカル時刻 `YYYY-MM-DD HH:mm`（保存はT区切り）。既存の日時検証を変更しない。秒が必要な更新日時とは異なる。
+Entry日時はローカル時刻 `YYYY-MM-DD HH:mm[:ss]`（保存はT区切り）。有効な原文の秒付き日時をpreview・保存で保持する。解析後の意図的な手動変更は尊重する。defaultや保存時刻で上書きしない。
 
 ### Entry保存先・別名
 
@@ -110,6 +112,7 @@ Final Summaryの必須／任意・保存先・正式例は[簡易クローズ仕
 決済価格: 78800
 決済数量: 0.005 BTC
 実現損益: 7.05 USDT
+手数料:
 理由: 第一利確
 メモ:
 ```
@@ -123,6 +126,7 @@ Final Summaryの必須／任意・保存先・正式例は[簡易クローズ仕
 決済価格: 80100
 決済数量: 0.005 BTC
 実現損益: -2.10 USDT
+手数料:
 理由: リスク縮小
 メモ:
 ```
@@ -136,6 +140,7 @@ Final Summaryの必須／任意・保存先・正式例は[簡易クローズ仕
 Exit価格: 80339.3
 決済数量: 0.01 BTC
 実現損益: -3.1737 USDT
+手数料:
 結果: Loss
 Exit理由: SL到達
 
@@ -162,7 +167,8 @@ Exit時Order Book / Heatmap:
 | 日時 | 約定日時 / 決済日時 / Entry日時 / Exit日時 | 必須。`events[].datetime` |
 | 価格 | 約定価格 / エントリー価格 / Entry価格 / 決済価格 / Exit価格 / TP価格 / SL価格 | 正数必須。`events[].price` |
 | 数量 | 決済数量 / Entry数量 / ポジションサイズ / Qty / Size | 正数必須。`events[].quantity` |
-| 実現損益 | Realized P&L / Realized PnL / P&L / PnL | 任意。`events[].realizedPnl`。未記録はnull、0・正数・負数を変更しない |
+| 手数料 | Fee / Fees / Commission | 任意。決済eventの`fee`。有限の0以上のコスト。未登録は欠落/null、0とは区別。Grossと同じ決済通貨 |
+| 実現損益 | Realized P&L / Realized PnL / P&L / PnL | 任意。`events[].realizedPnl`（Gross）。NetとFee Rateは導出し保存しない。未記録はnull、0・正数・負数を変更しない |
 | 理由 | Exit理由 / Entry理由 / 利確理由 / 損切り理由 | 任意。`events[].reason` |
 | メモ | コメント | 任意。`events[].memo` |
 | 振り返り | 同名 | 任意。event.memoへ含める。Final Exitでは`t.exitUpdate.review`にも保存 |
@@ -197,7 +203,7 @@ Final Exitの理由・メモ・振り返り・結果は既存の`exitUpdate.reas
 - event・raw・Exit分析/レビュー・今回画像は同じreadwriteトランザクションの単一trade保存。失敗時は全体ロールバック。Entry情報・Entry原文・既存画像を変更しない。
 - Entry追加画像の初期categoryはEntry。更新はUpdate、Final ExitはExit。更新画像のcategoryは利用者が変更可能。categoryなし旧画像はそのまま維持。
 - DB5、store構成、バックアップv10を維持。新任意項目・原文・events・Exit情報・画像category/BlobはJSON復元まで保持。旧バックアップも継続対応。読み取りmigration・既存レコードの自動更新・DB自動削除なし。
-- PWA静的キャッシュは1.13.0へ更新。IDBデータ/BlobはSWキャッシュ対象外。更新反映は既存タブ/アプリを閉じて再起動。GitHub Pages配下URLを継続。
+- PWA静的キャッシュは1.14.0へ更新。IDBデータ/BlobはSWキャッシュ対象外。更新反映は既存タブ/アプリを閉じて再起動。GitHub Pages配下URLを継続。
 
 ## テスト
 

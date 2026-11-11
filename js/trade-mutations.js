@@ -21,6 +21,7 @@ function tradeMutationCandidate(trade, targetId, patch, remove = false) {
     } else {
       if (patch.event?.type !== current.type) throw new Error('編集中eventと更新種別が一致しません。');
       next.events[index] = { ...current, ...patch.event, id: current.id };
+      if(next.events[index].fee===null || next.events[index].fee===undefined)delete next.events[index].fee;
     }
     next.events.sort((a,b) => tradeEventTimeKey(a.datetime).localeCompare(tradeEventTimeKey(b.datetime)));
     validateTradeEvents(next.events);
@@ -69,7 +70,7 @@ function getPeriodTradeStats(trades, start, end) {
   const closed = trades.filter(t=>{ const s=getResolvedTradeState(t); return s.isValid && s.status==='Closed' && within(s.lastExitDatetime?.split('T')[0]); });
   const stats = computeStats(closed);
   const pnl = eventStateSum(trades.flatMap(t=>Object.entries(getRealizationsByDate(t)).filter(([d])=>within(d)).map(([,p])=>p)));
-  return { ...stats, realizedPnl:pnl, closedTrades:closed.length, be:closed.filter(t=>tradeOutcome(t)==='BE').length, entries, closed };
+  return { ...stats, ...getPeriodFinancials(trades,start,end), realizedPnl:pnl, closedTrades:closed.length, be:closed.filter(t=>tradeOutcome(t)==='BE').length, entries, closed };
 }
 
 // Manual Entry/legacy form saves use the same optimistic safety as history edits.

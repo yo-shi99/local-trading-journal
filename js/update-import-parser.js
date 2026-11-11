@@ -16,6 +16,7 @@ for (const [key, names] of Object.entries({
   price: ['価格', '約定価格', 'エントリー価格', 'Entry価格', '決済価格', 'Exit価格', 'TP価格', 'SL価格'],
   quantity: ['数量', '決済数量', 'Entry数量', 'ポジションサイズ', 'Qty', 'Size'],
   realizedPnl: ['実現損益', 'Realized P&L', 'Realized PnL', 'P&L', 'PnL'],
+  fee: ['手数料', 'Fee', 'Fees', 'Commission'],
   reason: ['理由', 'Exit理由', 'Entry理由', '利確理由', '損切り理由'],
   memo: ['メモ', 'コメント'], review: ['振り返り'], result: ['結果'],
   exitPriceStructure: ['Exit時Price Structure'], exitFuturesCvd: ['Exit時Futures CVD'],
@@ -54,23 +55,24 @@ function parseUpdateImportText(rawText) {
   }
   const typeBlocks = blocks.filter(block => block.key === 'type');
   const summaryInput = typeBlocks.length === 1 && UPDATE_IMPORT_TYPES.get(updateImportTypeKey(typeBlocks[0].value.trim())) === 'Final Summary';
+  const feeAllowed=typeBlocks.length===1 && ['Partial TP','Partial SL','Final Exit'].includes(UPDATE_IMPORT_TYPES.get(updateImportTypeKey(typeBlocks[0].value.trim())));
   const seen = new Set();
   for (const block of blocks) {
     const { key, label } = block, value = block.value.trim();
-    if (!key) { unknown.push({ label, value }); continue; }
+    if (!key || (key==='fee'&&!feeAllowed)) { unknown.push({ label, value }); continue; }
     if (seen.has(key)) { errors.push(`${label}: 同じ項目が複数あります。1つにしてください。`); continue; }
     seen.add(key);
     let parsed = value;
     if (key === 'type') parsed = UPDATE_IMPORT_TYPES.get(updateImportTypeKey(value));
     else if (key === 'datetime') parsed = updateImportDatetime(value);
-    else if (['price', 'quantity', 'realizedPnl'].includes(key)) {
+    else if (['price', 'quantity', 'realizedPnl','fee'].includes(key)) {
       if (summaryInput && key === 'price' && value === '') parsed = null;
-      else if (key === 'realizedPnl' && (value === '' || value.toLowerCase() === 'null')) parsed = null;
+      else if (['realizedPnl','fee'].includes(key) && (value === '' || value.toLowerCase() === 'null')) parsed = null;
       else {
         const numeric = updateImportNumber(value);
         parsed = numeric && numeric.unit !== '%' ? numeric.number : undefined;
         if (numeric) units[key] = numeric.unit;
-        if (key !== 'realizedPnl' && !(parsed > 0)) parsed = undefined;
+        if (key === 'fee' ? !(parsed >= 0) : key !== 'realizedPnl' && !(parsed > 0)) parsed = undefined;
       }
     } else if (key === 'result') parsed = ({ win: 'Win', loss: 'Loss', be: 'BE', '勝ち': 'Win', '負け': 'Loss', '建値': 'BE' })[updateImportKey(value)];
     if (key === 'type' && updateImportTypeKey(value) === 'newentry') errors.push('New Entryは新規取引画面へ貼り付けてください。既存取引へは適用できません。');
@@ -81,11 +83,13 @@ function parseUpdateImportText(rawText) {
   for (const [key, label] of required) {
     if (!Object.hasOwn(fields, key)) errors.push(`${label}が不足、または無効です。`);
   }
+  if(feeAllowed && fields.fee!==null && units.fee && units.realizedPnl && units.fee.toUpperCase()!==units.realizedPnl.toUpperCase())errors.push('手数料と実現損益の通貨が一致していません。換算は行いません。');
   if (summaryInput && !Number.isFinite(fields.realizedPnl)) errors.push('Final Summaryでは実現損益の確定値が必須です（0は有効）。');
   if (summaryInput && fields.quantity !== undefined) warnings.push('Final Summaryの数量は原文にだけ保持し、残数量や決済数量の履歴を推測しません。');
   const event = { type: fields.type, datetime: fields.datetime, price: fields.price, quantity: fields.quantity,
     realizedPnl: fields.realizedPnl ?? null, reason: fields.reason || '',
     memo: [fields.memo, fields.review].filter(value => value !== undefined && value !== '').join('\n'), rawText };
+  if(Object.hasOwn(fields,'fee'))event.fee=fields.fee;
   const exitUpdate = {};
   if (['Final Exit', 'Final Summary'].includes(fields.type)) for (const key of ['review', 'reason', 'memo', 'result']) {
     if (Object.hasOwn(fields, key) && !(summaryInput && key === 'result')) exitUpdate[key] = fields[key];
@@ -132,7 +136,7 @@ function previewUpdateImport(trade, rawText) {
     if (duplicate) errors.push('同じtype・datetime・price・quantityのeventが登録済みです。重複追加はできません。');
     let id = '__update_import_preview__'; while (trade.events?.some(old => old.id === id)) id += '_';
     const candidate = withTradeEvent(trade, { ...e, id });
-    after = getTradeState(candidate);
+    after = getResolvedTradeState(candidate);
     if (!after.isValid) errors.push(...after.issues.map(issue => `反映後: ${issue.code}`));
     const epsilon = Math.max(before.epsilon || 0, after.epsilon || 0);
     if (e.type !== 'Add Entry' && e.quantity - before.remainingQuantity > epsilon) errors.push('数量が現在残数量を超えています。補正せず保存を停止します。');

@@ -45,10 +45,11 @@ function cryptoTradeDates(t) {
   return [t.date, t.cryptoJournal?.exitAt?.split('T')[0]].filter(Boolean);
 }
 function validCryptoDateTime(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return false;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::[0-5]\d)?$/.test(value)) return false;
   const d = new Date(value), pad = n => String(n).padStart(2, '0');
-  return Number.isFinite(d.getTime()) && `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}` === value;
+  return Number.isFinite(d.getTime()) && `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}${value.length===19?':'+pad(d.getSeconds()):''}` === value;
 }
+function cryptoDateTimeKey(value) { return value.length===16?value+':00':value; }
 function cryptoNumber(id) {
   const field = document.getElementById(id);
   if (field.validity.badInput) throw new Error('数値を正しく入力してください。');
@@ -63,7 +64,7 @@ function cryptoChoices(name, values, title) {
     `<label><input type="radio" name="${name}" value="${value}"><span>${value}</span></label>`).join('')}</fieldset>`;
 }
 function cryptoInput(id, label, type = 'number', extra = '') {
-  return `<label class="crypto-field" for="${id}">${label}<input id="${id}" type="${type}" ${type === 'number' ? 'step="any" inputmode="decimal"' : ''} ${extra}></label>`;
+  return `<label class="crypto-field" for="${id}">${label}<input id="${id}" type="${type}" ${type === 'number' ? 'step="any" inputmode="decimal"' : type==='datetime-local'?'step="1"':''} ${extra}></label>`;
 }
 function cryptoText(id, label) {
   return `<label class="crypto-field" for="${id}">${label}<textarea id="${id}" rows="3"></textarea></label>`;
@@ -161,7 +162,7 @@ function validateCryptoJournal(c) {
   validateOptionalAnalysis(c?.entryAnalysis, ENTRY_ANALYSIS_FIELDS);
   if (!c || c.version !== 1 || !['Long', 'Short'].includes(c.direction) ||
       !validCryptoDateTime(c.entryAt) ||
-      (c.exitAt != null && c.exitAt !== '' && (!validCryptoDateTime(c.exitAt) || c.exitAt < c.entryAt)) ||
+      (c.exitAt != null && c.exitAt !== '' && (!validCryptoDateTime(c.exitAt) || cryptoDateTimeKey(c.exitAt) < cryptoDateTimeKey(c.entryAt))) ||
       (c.analysisText !== undefined && typeof c.analysisText !== 'string') ||
       !Number.isFinite(c.entryPrice) || c.entryPrice <= 0 || !Number.isFinite(c.positionSize) || c.positionSize <= 0 ||
       ![c.stopLossPrice, c.takeProfitPrice].every(n => n === null || (Number.isFinite(n) && n > 0)) ||
@@ -248,9 +249,18 @@ function cryptoTradeDetails(t) {
     </details></section>`;
 }
 
+function entryDatetimeDraft(old) {
+  const value=document.getElementById('crypto-entry-at').value;
+  if(!analysisEditedFields.has('crypto-entry-at')){
+    if(analysisEntryDatetime)return analysisEntryDatetime;
+    const stored=old?.cryptoJournal?.entryAt;
+    if(stored&&cryptoDateTimeKey(stored)===cryptoDateTimeKey(value))return stored;
+  }
+  return value;
+}
 function readCryptoJournalDraft(old) {
   const c = { ...(old?.cryptoJournal || {}), version: 1, direction: selectedCryptoChoice('crypto-direction'),
-    entryAt: document.getElementById('crypto-entry-at').value, exitAt: document.getElementById('crypto-exit-at').value,
+    entryAt: entryDatetimeDraft(old), exitAt: document.getElementById('crypto-exit-at').value,
     resultMode: cryptoResultManual ? 'manual' : 'auto', entryPrice: cryptoNumber('crypto-entry-price'),
     stopLossPrice: cryptoNumber('crypto-sl'), takeProfitPrice: cryptoNumber('crypto-tp'), positionSize: cryptoNumber('crypto-size'),
     realizedPnl: cryptoNumber('crypto-pnl'), result: selectedCryptoChoice('crypto-result'), strategy: selectedCryptoChoice('crypto-strategy'),

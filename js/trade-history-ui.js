@@ -2,7 +2,7 @@ function tradeStateAndEventsHtml(trade) {
 
   const s = getResolvedTradeState(trade), value = v => v === null || v === undefined ? '—' : escHtml(String(v));
   const metrics = [ ['結果', s.result], ['平均建値', s.averageEntryPrice], ['総Entry数量', s.totalEntryQuantity],
-    ['決済済み数量', s.closedQuantity], ['残数量', s.remainingQuantity], ['累計実現損益', s.realizedPnl],
+    ['決済済み数量', s.closedQuantity], ['残数量', s.remainingQuantity], ['累計実現損益', s.realizedPnl], ['Gross P&L',s.grossRealizedPnl],['Total Fees',s.totalFees],['Net P&L',s.netRealizedPnl],['手数料登録',s.feeCoverage==='partial'?'一部未登録・Net未確定':s.feeCoverage==='complete'?'全決済登録済':'未登録／対象外'],
     ['最終Exit日時', s.lastExitDatetime], ['最終Exit価格', s.lastExitPrice], ['Add Entry回数', s.addEntryCount],
     ['Partial TP回数', s.partialTpCount], ['Partial SL回数', s.partialSlCount] ];
   const history = Array.isArray(trade.events) ? trade.events.map((event, index) => ({ event, index }))
@@ -11,12 +11,12 @@ function tradeStateAndEventsHtml(trade) {
     ${s.baselineUsed ? '<p class="crypto-hint">旧Entry情報を計算上の基準に使用しています。Entry eventの書込みは行っていません。</p>' : ''}
     ${trade.finalSummary?.rawText ? `<details><summary>簡易クローズ原文</summary><pre class="analysis-original">${value(trade.finalSummary.rawText)}</pre></details>` : ''}
     ${s.issues.length ? `<ul class="trade-state-warnings" role="status">${s.issues.map(issue => `<li>${value(issue.code)}${issue.message ? ': ' + value(issue.message) : ''}</li>`).join('')}</ul>` : ''}
-    <dl class="trade-state-grid">${metrics.map(([label, v]) => `<div><dt>${label}</dt><dd>${value(v)}</dd></div>`).join('')}</dl>
+    <dl class="trade-state-grid">${metrics.map(([label, v]) => `<div><dt>${label}</dt><dd>${['累計実現損益','Gross P&L','Total Fees','Net P&L'].includes(label)?escHtml(formatFinancialNumber(v)):value(v)}</dd></div>`).join('')}</dl>
     <p class="crypto-hint">表示・カレンダー・統計は同じ決済結果を参照します。Entryの保存値は変更しません。</p></section>
     <section class="trade-events-panel" aria-label="売買履歴"><h3>売買履歴 / Trade Events</h3>
       <ol class="trade-event-list">${history.map(({ event: e }) => `<li class="trade-event-card"><strong>${value(e?.type)}</strong>
         <p>${value(e?.datetime)}</p>${typeof activeTradeDetailId !== 'undefined' && activeTradeDetailId === trade.id ? `<div class="event-actions"><button data-event-edit="${value(e.id)}">編集</button>${e.type !== 'Entry' ? `<button data-event-delete="${value(e.id)}">削除</button>` : ''}</div>` : ''}<dl><dt>価格</dt><dd>${value(e?.price)}</dd><dt>数量</dt><dd>${value(e?.quantity)}</dd>
-        <dt>実現損益</dt><dd>${value(e?.realizedPnl)}</dd><dt>理由</dt><dd>${value(e?.reason)}</dd><dt>メモ</dt><dd>${value(e?.memo)}</dd></dl>
+        <dt>実現損益（Gross）</dt><dd>${value(e?.realizedPnl)}</dd>${eventFinancialsHtml(e)}<dt>理由</dt><dd>${value(e?.reason)}</dd><dt>メモ</dt><dd>${value(e?.memo)}</dd></dl>
         ${e?.rawText !== undefined ? `<details><summary>更新原文</summary><pre class="analysis-original">${value(e.rawText)}</pre></details>` : ''}</li>`).join('')}</ol></section>`;
 }
 
@@ -34,7 +34,13 @@ function exitUpdateDetailsHtml(trade) {
 function resolvedTradeSummaryHtml(trade) {
   const s = getResolvedTradeState(trade), v = n => n === null || n === undefined ? '—' : escHtml(String(n));
   return `<div class="crypto-summary resolved-trade-summary"><strong>${v(s.status)} · ${s.source === 'summary' ? 'Summary（途中イベント未記録）' : s.source === 'legacy' ? 'Legacy' : 'Full History'}</strong>
-    <span>${v(s.result)} / 実現損益 ${v(s.realizedPnl)}</span>
+    <span>${v(s.result)} / 実現損益 ${v(s.realizedPnl)}${s.accountingBasis==='net'?'（Net）':''}</span>${s.totalFees!==null?`<span>Gross ${v(s.grossRealizedPnl)} / Fees ${v(s.totalFees)} / Net ${v(s.netRealizedPnl)}${s.feeCoverage==='partial'?'（未確定・主成績はGross）':''}</span>`:''}
     <span>平均Entry ${v(s.averageEntryPrice)} / 総Entry数量 ${v(s.totalEntryQuantity)} / 残数量 ${v(s.remainingQuantity)}</span>
     <span>最終Exit ${v(s.lastExitDatetime)} / ${v(s.lastExitPrice)}</span></div>`;
+}
+
+function eventFinancialsHtml(event){
+  if(!['Partial TP','Partial SL','Final Exit'].includes(event?.type))return '';
+  const f=getEventFinancials(event),v=x=>escHtml(formatFinancialNumber(x));
+  return `<dt>手数料</dt><dd>${v(f.fee)}</dd><dt>手数料控除後損益（Net）</dt><dd>${v(f.netRealizedPnl)}</dd><dt>手数料率</dt><dd>${f.feeRate===null?'—':f.feeRate.toFixed(2)+'%'}</dd>`;
 }
