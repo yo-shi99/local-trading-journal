@@ -56,7 +56,7 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     console.log('PASS manifest recognized, icons, start_url, scope, actual SW activation at Pages subpath');
 
     await page.locator('.header-add-btn').click();
-    const analysis = '銘柄: BTC\n方向: Long\nエントリー価格: 65000\nポジションサイズ: 0.01\n戦略: SFP\nCVD: 上昇';
+    const analysis = '銘柄: BTC\nエントリー日時: 2026-10-22 10:00:18\n方向: Long\nエントリー価格: 65000\nポジションサイズ: 0.01\n戦略: SFP\nCVD: 上昇';
     await page.waitForSelector('#update-import-text', { state: 'visible' });
     await page.locator('#update-import-text').evaluate((el, text) => {
       const data = new DataTransfer(); data.setData('text/plain', text);
@@ -75,9 +75,10 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     await page.getByRole('button', { name: 'Save Trade', exact: true }).click();
     await page.waitForFunction(() => load().length === 1 && document.getElementById('trade-form').style.display === 'none');
     await page.evaluate(() => closeModal());
+    assert.equal(await page.evaluate(()=>load()[0].cryptoJournal.entryAt),'2026-10-22T10:00:18');
     const id = await page.evaluate(() => load()[0].id);
     const history = await page.evaluate(async id => (await appendTradeEvent(id, {
-      type: 'Entry', datetime: '2026-10-22T10:00', price: 65000, quantity: 0.01,
+      type: 'Entry', datetime: '2026-10-22T10:00:18', price: 65000, quantity: 0.01,
       realizedPnl: 0, reason: 'PWA test', memo: 'online',
     })).events, id);
     const initialState = await page.evaluate(() => getTradeState(load()[0]));
@@ -141,7 +142,7 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     const ethId = await page.evaluate(() => load().find(t => t.symbol === 'ETH').id);
     const ethEntry = await page.evaluate(() => structuredClone(load().find(t => t.symbol === 'ETH').cryptoJournal));
     await page.evaluate(()=>{if(hasTradeEditorNavigation())cancelForm();}); await page.waitForFunction(()=>!tradeEditorHistoryClosing&&!detailHistoryClosing); await page.evaluate(id => (openTradeDetail(id), editTradeEntry('fields')), ethId);
-    const ethExitText = `更新種別: Final Exit\n決済日時: ${ethEntry.entryAt}\nExit価格: 2501\n決済数量: 0.1 ETH\n実現損益: 0\nExit時Futures CVD: offline exit futures\nExit時Spot CVD: offline exit spot\n振り返り: offline final review`;
+    const ethExitText = `更新種別: Final Exit\n決済日時: ${ethEntry.entryAt}\nExit価格: 2501\n決済数量: 0.1 ETH\n実現損益: 0\n手数料: 0.5 USDT\nExit時Futures CVD: offline exit futures\nExit時Spot CVD: offline exit spot\n振り返り: offline final review`;
     await page.locator('#update-import-text').fill(ethExitText);
     await page.locator('#update-import-analyse').click();
     await page.waitForFunction(() => updateImportPending !== null);
@@ -151,10 +152,14 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     assert.deepEqual(await page.evaluate(() => load().find(t => t.symbol === 'ETH').cryptoJournal), ethEntry);
     assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').exitUpdate.analysis.exitSpotCvd), 'offline exit spot');
     assert.equal(await page.evaluate(() => getTradeState(load().find(t => t.symbol === 'ETH')).status), 'Closed');
+    assert.equal(await page.evaluate(id=>getResolvedTradeState(load().find(t=>t.id===id)).realizedPnl,ethId),-.5);
+    assert.equal(await page.evaluate(id=>getResolvedTradeState(load().find(t=>t.id===id)).result,ethId),'Loss');
     // The same atomic edit API must remain usable from the cached app offline.
-    await page.evaluate(async id=>{const t=await dbGet('trades',id),e=t.events[0];await mutateTradeHistory(id,e.id,{event:{...e,reason:'offline edited event'}},updateImportRevision(t));},ethId);
+    await page.evaluate(async id=>{const t=await dbGet('trades',id),e=t.events[0];await mutateTradeHistory(id,e.id,{event:{...e,reason:'offline edited event',fee:0}},updateImportRevision(t));},ethId);
     await page.reload();await page.waitForFunction(()=>load().length===2);
     assert.equal(await page.evaluate(id=>load().find(t=>t.id===id).events[0].reason,ethId),'offline edited event');
+    assert.equal(await page.evaluate(id=>load().find(t=>t.id===id).events[0].fee,ethId),0);
+    assert.equal(await page.evaluate(id=>getResolvedTradeState(load().find(t=>t.id===id)).realizedPnl,ethId),0);
     const priorFullState = await page.evaluate(id => getResolvedTradeState(load().find(t => t.id === id)), id);
     assert.ok(Math.abs(priorFullState.remainingQuantity - .014) < 1e-12);
     assert.ok(Math.abs(priorFullState.averageEntryPrice - 64666.666666666664) < 1e-8);
@@ -193,6 +198,7 @@ const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': '
     await restoring; await page.waitForFunction(() => load().length === 2);
     assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').exitUpdate.analysis.exitFuturesCvd), 'offline exit futures');
     assert.equal(await page.evaluate(() => load().find(t => t.symbol === 'ETH').events[0].rawText), ethExitText);
+    assert.equal(await page.evaluate(()=>load().find(t=>t.symbol==='ETH').events[0].fee),0);
     console.log('PASS online return preserves IndexedDB, original analysis and images; backup restore');
 
     await page.evaluate(() => caches.open('unrelated-cache').then(c => c.put('/unrelated', new Response('keep'))));

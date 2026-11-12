@@ -1,3 +1,4 @@
+let analysisEntryDatetime = null;
 /* Local, deterministic parsing of manually copied ChatGPT text. No network/clipboard API. */
 let analysisFormGeneration = 0;
 let analysisApplied = false;
@@ -60,10 +61,11 @@ function analysisNumber(raw) {
 }
 function analysisDate(raw) {
   const value = raw.normalize('NFKC').trim();
-  const match = value.match(/^(\d{4})(?:[-/.]|年)(\d{1,2})(?:[-/.]|月)(\d{1,2})日?[T\s]+(\d{1,2})(?::|時)(\d{2})分?$/);
+  const match = value.match(/^(\d{4})(?:[-/.]|年)(\d{1,2})(?:[-/.]|月)(\d{1,2})日?[T\s]+(\d{1,2})(?::|時)(\d{2})分?(?::(\d{2})|([0-5]\d)秒)?$/);
   if (!match) return undefined; // No guessed dates or silent timezone conversion.
-  const [, year, month, day, hour, minute] = match;
-  const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}`;
+  const [, year, month, day, hour, minute, colonSecond, japaneseSecond] = match;
+  const second=colonSecond??japaneseSecond;
+  const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}${second===undefined?'':':'+second}`;
   return validCryptoDateTime(date) ? date : undefined;
 }
 function parseAnalysisText(text) {
@@ -143,7 +145,7 @@ function applyAnalysisText(options = {}) {
   // Do not introduce an invalid entry/exit pair into the existing form.
   const entry = fields.entryAt ?? document.getElementById('crypto-entry-at').value;
   const exit = fields.exitAt ?? document.getElementById('crypto-exit-at').value;
-  if (entry && exit && exit < entry) {
+  if (entry && exit && cryptoDateTimeKey(exit) < cryptoDateTimeKey(entry)) {
     for (const key of ['entryAt', 'exitAt']) {
       if (fields[key] !== undefined) {
         delete fields[key];
@@ -158,6 +160,7 @@ function applyAnalysisText(options = {}) {
     return;
   }
   for (const op of operations) op.set();
+  if(fields.entryAt!==undefined){analysisEntryDatetime=fields.entryAt;analysisEditedFields.delete('crypto-entry-at');}
   if (fields.result !== undefined) cryptoResultManual = true; // Never derive/alter PnL from a qualitative outcome.
   updateCryptoChoices();
   analysisApplied = true;
@@ -185,6 +188,7 @@ function initAnalysisImport(root) {
   textarea.addEventListener('input', event => { if (event.inputType === 'insertFromPaste') afterPaste(); });
 }
 function resetAnalysisImport(text = '') {
+  analysisEntryDatetime = null;
   analysisFormGeneration++;
   analysisApplied = false;
   analysisEditedFields.clear();

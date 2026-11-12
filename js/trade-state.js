@@ -178,7 +178,7 @@ function getResolvedTradeState(trade) {
   catch (error) { return { source: 'invalid', isValid: false, status: 'Invalid', issues: [{ code: 'INVALID_SUMMARY', message: error.message }],
     totalEntryQuantity: null, averageEntryPrice: null, closedQuantity: null, remainingQuantity: null,
     realizedPnl: null, lastExitDatetime: null, lastExitPrice: null, result: '', epsilon: 0 }; }
-  const s = getTradeState(trade);
+  const s = resolveTradeFinancials(trade,getTradeState(trade));
   const result = s.isValid && s.status === 'Closed' && Number.isFinite(s.realizedPnl)
     ? s.realizedPnl > 0 ? 'Win' : s.realizedPnl < 0 ? 'Loss' : 'BE' : '';
   return { ...s, historyMode: s.source === 'summary' ? 'summary' : s.source === 'events' ? 'full' : 'legacy', result };
@@ -191,7 +191,7 @@ function getResolvedRealizations(trade) {
   for (const event of trade.events || []) {
     if (['Partial TP', 'Partial SL', 'Final Exit'].includes(event.type) && event.realizedPnl !== null) {
       const date = event.datetime.split('T')[0];
-      (dates[date] ||= []).push(event.realizedPnl);
+      (dates[date] ||= []).push(s.accountingBasis==='net'?getEventFinancials(event).netRealizedPnl:event.realizedPnl);
     }
   }
   return Object.fromEntries(Object.entries(dates).map(([date, values]) => [date, eventStateSum(values)]));
@@ -207,4 +207,59 @@ function getTradeActivityDates(trade) {
   const s = getResolvedTradeState(trade);
   return [...new Set([getTradeEntryDatetime(trade).split('T')[0], ...(Array.isArray(trade.events) ? trade.events : []).map(event => event?.datetime?.split('T')[0]),
     s.lastExitDatetime?.split('T')[0]].filter(Boolean))];
+}
+
+// Persist only the quoted gross PnL and optional cost. Derived figures never migrate records.
+function getEventFinancials(event) {
+  const exit = ['Partial TP','Partial SL','Final Exit'].includes(event?.type);
+  const gross = exit && Number.isFinite(event.realizedPnl) ? event.realizedPnl : null;
+  const fee = exit && Number.isFinite(event.fee) && event.fee >= 0 ? event.fee : null;
+  const net = gross !== null && fee !== null ? gross - fee : null;
+  const rate = gross !== null && gross !== 0 && fee !== null ? fee / Math.abs(gross) * 100 : null;
+  return { grossRealizedPnl:gross, fee, netRealizedPnl:Number.isFinite(net)?net:null,
+    feeRate:Number.isFinite(rate)?rate:null };
+}
+function resolveTradeFinancials(trade, state) {
+  const fallback={...state,grossRealizedPnl:state.source==='events'?state.realizedPnl:null,totalFees:null,netRealizedPnl:null,
+    feeCoverage:'none',accountingBasis:state.source==='events'?'gross':state.source};
+  if(!state.isValid || state.source!=='events')return fallback;
+  const exits=(trade.events||[]).filter(e=>['Partial TP','Partial SL','Final Exit'].includes(e.type));
+  const values=exits.map(getEventFinancials),known=values.filter(v=>v.fee!==null);
+  const complete=values.length>0 && values.every(v=>v.fee!==null&&v.grossRealizedPnl!==null);
+  const totalFees=known.length?eventStateSum(known.map(v=>v.fee)):null;
+  const net=complete?eventStateSum(values.map(v=>v.netRealizedPnl)):null;
+  if((totalFees!==null&&!Number.isFinite(totalFees)) || (complete&&(net===null||!Number.isFinite(net)||values.some(v=>v.netRealizedPnl===null))))
+    return {...fallback,isValid:false,status:'Invalid',realizedPnl:null,result:'',issues:[...state.issues,{code:'NUMERIC_OVERFLOW'}]};
+  return {...fallback,totalFees,netRealizedPnl:net,feeCoverage:complete?'complete':known.length?'partial':'none',
+    accountingBasis:complete?'net':'gross',realizedPnl:complete?net:state.realizedPnl};
+}
+function getGrossRealizationsByDate(trade) {
+  const s=getResolvedTradeState(trade);if(!s.isValid)return {};
+  if(s.source!=='events')return {};
+  const result={};
+  for(const e of trade.events||[])if(['Partial TP','Partial SL','Final Exit'].includes(e.type)&&Number.isFinite(e.realizedPnl))
+    (result[e.datetime.split('T')[0]]||=[]).push(e.realizedPnl);
+  return Object.fromEntries(Object.entries(result).map(([d,v])=>[d,eventStateSum(v)]));
+}
+function getFeeRealizationsByDate(trade) {
+  const s=getResolvedTradeState(trade);if(!s.isValid||s.source!=='events')return {};
+  const result={};
+  for(const e of trade.events||[]){const f=getEventFinancials(e);if(f.fee!==null)(result[e.datetime.split('T')[0]]||=[]).push(f.fee);}
+  return Object.fromEntries(Object.entries(result).map(([d,v])=>[d,eventStateSum(v)]));
+}
+function getPeriodFinancials(trades,start,end) {
+  const inRange=d=>d>=start&&d<=end, gross=[],fees=[],net=[],relevant=[];
+  for(const t of trades){
+    const g=getGrossRealizationsByDate(t), f=getFeeRealizationsByDate(t), r=getRealizationsByDate(t);
+    gross.push(...Object.entries(g).filter(([d])=>inRange(d)).map(([,v])=>v));
+    fees.push(...Object.entries(f).filter(([d])=>inRange(d)).map(([,v])=>v));
+    if(Object.keys(r).some(inRange)){relevant.push(getResolvedTradeState(t));net.push(...Object.entries(r).filter(([d])=>inRange(d)).map(([,v])=>v));}
+  }
+  return {hasFeeInformation:relevant.some(s=>s.source==='events'&&s.feeCoverage!=='none'),grossRealizedPnl:relevant.every(s=>s.source==='events')?eventStateSum(gross):null,totalFees:fees.length?eventStateSum(fees):null,
+    netRealizedPnl:relevant.length&&relevant.every(s=>s.accountingBasis==='net')?eventStateSum(net):null};
+}
+
+function formatFinancialNumber(value){
+  if(value===null||value===undefined||!Number.isFinite(value))return '—';
+  return value!==0&&Math.abs(value)<1e-10?String(value):value.toLocaleString('en-US',{useGrouping:false,maximumFractionDigits:12});
 }

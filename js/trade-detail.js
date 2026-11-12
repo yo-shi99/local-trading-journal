@@ -59,7 +59,7 @@ function editTradeEntry(mode='entry'){
   document.getElementById('form-title').textContent=mode==='append'?'更新を追加':'Entry / Trade編集';
   if(mode==='append')document.getElementById('update-import-text').focus();
 }
-const EVENT_EDIT_FIELDS=[['datetime','日時','datetime-local'],['price','価格','number'],['quantity','数量','number'],['realizedPnl','実現損益','number'],['reason','理由','text'],['memo','メモ','text']];
+const EVENT_EDIT_FIELDS=[['datetime','日時','datetime-local'],['price','価格','number'],['quantity','数量','number'],['realizedPnl','実現損益（Gross）','number'],['fee','手数料（未登録は空欄）','number'],['reason','理由','text'],['memo','メモ','text']];
 function openEventEditor(target){
   if(eventEditBusy||eventEditDraft||hasTradeEditorNavigation())return;
   const trade=load().find(t=>t.id===activeTradeDetailId),summary=target==='summary';
@@ -70,7 +70,7 @@ function openEventEditor(target){
 }
 function renderEventEditor(){
   const d=eventEditDraft,summary=d.target==='summary',v=x=>escHtml(String(x??''));
-  const fields=EVENT_EDIT_FIELDS.filter(([k])=>!summary||k!=='quantity');
+  const fields=EVENT_EDIT_FIELDS.filter(([k])=>(!summary||k!=='quantity')&&(k!=='fee'||['Partial TP','Partial SL','Final Exit'].includes(d.type)));
   document.getElementById('event-editor-host').innerHTML=`<section id="event-editor" class="event-editor"><h3>${v(d.type)}を編集（既存IDを更新）</h3>
     <label>ChatGPT取引テキスト<textarea id="event-edit-text" rows="8">${v(d.rawText)}</textarea></label><button id="event-edit-analyse">解析して確認</button>
     ${fields.map(([key,label,type])=>`<label>${label}<input id="event-edit-${key}" type="${type}" step="any" value="${v(summary&&['reason','memo'].includes(key)?d.exitUpdate[key]:d.event[key])}"></label>`).join('')}
@@ -106,8 +106,11 @@ function readEventEditPatch(){
   if(document.getElementById('event-edit-text').value!==d.rawText)throw new Error('貼り付けテキストを先に解析してください。');
   for(const [key] of EVENT_EDIT_FIELDS){
     if(summary&&['quantity','reason','memo'].includes(key))continue;
-    const value=document.getElementById('event-edit-'+key).value;
-    event[key]=['price','quantity','realizedPnl'].includes(key)?value===''?null:Number(value):value;
+    if(key==='fee'&&!['Partial TP','Partial SL','Final Exit'].includes(d.type))continue;
+    const field=document.getElementById('event-edit-'+key);
+    if(key==='fee'&&field.validity.badInput)throw new Error('手数料を正しい数値で入力してください。');
+    const value=field.value;
+    event[key]=['price','quantity','realizedPnl','fee'].includes(key)?value===''?null:Number(value):value;
   }
   event.rawText=d.rawText;
   const patch=summary?{summary:event}:{event};
@@ -125,7 +128,7 @@ function previewEventEdit(){
     const d=eventEditDraft,trade=load().find(t=>t.id===d.tradeId),patch=readEventEditPatch();
     const next=tradeMutationCandidate(trade,d.target,patch),s=getResolvedTradeState(next);
     d.preview={patch,proof:JSON.stringify(patch)};
-    document.getElementById('event-edit-preview').textContent=`${s.status} · ${s.result}\nRealized P&L ${s.realizedPnl}\nRemaining ${s.remainingQuantity??'不明'}${s.issues.length?'\n警告: '+s.issues.map(i=>i.code).join(', '):''}${d.parseNotice?'\n'+d.parseNotice:''}`;
+    document.getElementById('event-edit-preview').textContent=`${s.status} · ${s.result}\nRealized P&L ${s.realizedPnl}\nGross ${s.grossRealizedPnl} / Fees ${s.totalFees??'未登録'} / Net ${s.netRealizedPnl??'未確定'}\nRemaining ${s.remainingQuantity??'不明'}${s.issues.length?'\n警告: '+s.issues.map(i=>i.code).join(', '):''}${d.parseNotice?'\n'+d.parseNotice:''}`;
     document.getElementById('event-edit-save').disabled=false;
   }catch(e){eventEditDraft.preview=null;document.getElementById('event-edit-preview').textContent=e.message;document.getElementById('event-edit-save').disabled=true;}
 }

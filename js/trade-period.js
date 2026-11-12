@@ -13,7 +13,8 @@ function refreshPeriodModal(start,end,weekly=false){
   const trades=applyGlobalFilter(load()),p=getPeriodTradeStats(trades,start,end);
   const money=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:8});
   const cards=[['Realized P&L',money(p.realizedPnl)],['Closed Trades',p.closedTrades],['Wins',p.wins],['Losses',p.losses],['BE',p.be],['Avg Win',p.avgWin===null?'—':p.avgWin],['Avg Loss',p.avgLoss===null?'—':p.avgLoss],['Profit Factor',p.pf]];
-  document.getElementById('day-summary').innerHTML=`<h3 class="period-heading">${weekly?'Weekly':'Daily'} Summary</h3>`+cards.map(([label,value])=>`<div class="ds-card"><div class="ds-label">${escHtml(label)}</div><div class="ds-value">${escHtml(String(value))}</div></div>`).join('');
+  if(p.hasFeeInformation||p.totalFees!==null)cards.push(['Gross P&L',p.grossRealizedPnl===null?'未確定':money(p.grossRealizedPnl)],['Fees',p.totalFees===null?'未登録':money(p.totalFees)],['Net P&L',p.netRealizedPnl===null?'未確定':money(p.netRealizedPnl)]);
+  document.getElementById('day-summary').innerHTML=`<h3 class="period-heading">${weekly?'Weekly':'Daily'} Summary</h3>`+cards.map(([label,value])=>`<div class="ds-card"><div class="ds-label">${escHtml(label)}</div><div class="ds-value">${escHtml(String(value))}</div></div>`).join('')+(p.hasFeeInformation&&p.netRealizedPnl===null?'<p class="crypto-hint period-heading">Net未確定：手数料の一部未登録、または旧形式の損益を含みます。Net確定取引以外は従来損益で集計します。</p>':'');
   document.getElementById('trade-list').innerHTML=`<section aria-label="Closed Trades"><h3>Closed Trades ${p.closedTrades}</h3>${p.closed.map(periodTradeCard).join('')}</section><section aria-label="Entries"><h3>Entries ${p.entries.length}</h3>${p.entries.map(periodTradeCard).join('')||'<p>この期間のEntryはありません。</p>'}</section>`;
   document.getElementById('trade-list').onclick=e=>{const link=e.target.closest('[data-open-trade]');if(link)openTradeDetail(link.dataset.openTrade);};
 }

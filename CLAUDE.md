@@ -1,6 +1,6 @@
 # PROJECT: Local Trading Journal
 
-> Last updated: 2026-10-29 — keep this current. If something here is wrong, fix it before doing anything else.
+> Last updated: 2026-11-12 — keep this current. If something here is wrong, fix it before doing anything else.
 
 ---
 
@@ -8,7 +8,7 @@
 
 A privacy-first, browser-only trading journal that runs entirely on the user's machine — no account, no server (for the core journal), no data leaving the browser. All trade and plan data lives in IndexedDB. An optional **Signal Intel** background server (`signal-intel/`) adds local AI-powered news/signal analysis. Marketed as a free replacement for paid SaaS journals (Tradervue, TraderSync, Tradezella).
 
-**Stage:** Production crypto journal (v1.13.0; see `docs/trade-detail-management.md`)
+**Stage:** Production crypto journal (v1.14.0; see `docs/entry-datetime-and-fees.md`)
 **Primary user:** Crypto trader using ChatGPT text import; legacy options/equities records remain supported who reviews trades daily
 **Success metric:** Daily use — every trade logged, every day's P&L tagged with rules/mistakes
 
@@ -114,8 +114,8 @@ local-trading-journal/
 ## 5. Versioning
 
 Version lives in **four** places that must stay in sync:
-1. `version.json` → `{ "version": "1.13.0" }`
-2. `index.html` → `<div class="logo-version" id="app-version">v1.13.0</div>`
+1. `version.json` → `{ "version": "1.14.0" }`
+2. `index.html` → `<div class="logo-version" id="app-version">v1.14.0</div>`
 
 3. `js/app.js` → `APP_VERSION`
 4. `sw.js` → `CACHE_VERSION` (bump whenever bundled assets change)
@@ -232,3 +232,5 @@ Run test scripts with `node tests/<suite>.cjs` against a local HTTP server (Play
 - prevRpt settings keys (`ltj_prevRptIds_*`) accumulate per-symbol with no cleanup. Acceptable until users complain about IDB size.
 
 Current journal writes for Entry/import/Exit await atomic IndexedDB commit before updating memory. The older fire-and-forget collection APIs remain for compatibility; do not use them for new import writes. Events/Summary/legacy display and aggregation resolve through getResolvedTradeState(), with DB5 and backup v10 unchanged.
+
+Entry imports accept local minute/second timestamps. An explicitly parsed New Entry timestamp survives defaults until an intentional user input; no clock-based save fallback. Event fee is optional (missing != zero); net and fee rate are derived. getTradeState remains raw gross/quantity calculation; getResolvedTradeState uses Net as primary PnL only when every exit has gross+fee. Partial fee coverage is explicitly unconfirmed and retains gross accounting. Summary/legacy ignore event fees. See docs/entry-datetime-and-fees.md.

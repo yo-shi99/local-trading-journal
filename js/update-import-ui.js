@@ -72,15 +72,16 @@ function renderImportPreview(preview) {
   } else {
     const e = preview.summary ? { type: 'Final Summary', ...preview.summary } : preview.event;
     lines.push(`更新種別: ${fmt(e.type)}`, `日時: ${fmt(e.datetime)}`, `価格: ${fmt(e.price)} ${preview.units.price || ''}`,
-      `数量: ${preview.summary ? '履歴未記録・推測しません' : fmt(e.quantity)}`, `実現損益: ${fmt(e.realizedPnl)}`, `結果: ${preview.summary?.result || preview.exitUpdate.result || '—'}`);
+      `数量: ${preview.summary ? '履歴未記録・推測しません' : fmt(e.quantity)}`, `実現損益: ${fmt(e.realizedPnl)}`, `結果: ${preview.after?.result || (preview.after?.status==='Invalid'?'Invalid':'未確定')}`);
+    if (!preview.summary) {const f=getEventFinancials(e);if(['Partial TP','Partial SL','Final Exit'].includes(e.type))lines.push(`手数料: ${fmt(f.fee)}`,`Net P&L: ${fmt(f.netRealizedPnl)}`,`手数料率: ${f.feeRate===null?'—':f.feeRate.toFixed(2)+'%'}`);}
     if (!preview.summary) lines.push(`理由: ${e.reason}`, `メモ: ${e.memo}`);
-    const labels = { review: 'Exitレビュー', reason: 'Exit理由', memo: 'Exit時メモ', result: '結果' };
+    const labels = { review: 'Exitレビュー', reason: 'Exit理由', memo: 'Exit時メモ', result: '原文の結果（参考）' };
     for (const [key,value] of Object.entries(preview.exitUpdate)) {
       if (key === 'analysis') lines.push(...EXIT_ANALYSIS_FIELDS.filter(([k]) => Object.hasOwn(value,k)).map(([k,label]) => `${label}: ${value[k]}`));
       else lines.push(`${labels[key]}: ${value}`);
     }
     if (preview.after) lines.push('\n反映後:', `残数量 ${fmt(preview.before.remainingQuantity)} → ${fmt(preview.after.remainingQuantity)}`,
-      `累計実現損益 ${fmt(preview.before.realizedPnl)} → ${fmt(preview.after.realizedPnl)}`, `平均建値 ${fmt(preview.after.averageEntryPrice)}`, `総Entry数量 ${fmt(preview.after.totalEntryQuantity)}`, `状態 ${preview.after.status}`);
+      `累計実現損益 ${fmt(preview.before.realizedPnl)} → ${fmt(preview.after.realizedPnl)}`,`Gross ${fmt(preview.after.grossRealizedPnl)} / Fees ${fmt(preview.after.totalFees)} / Net ${fmt(preview.after.netRealizedPnl)}${preview.after.feeCoverage==='partial'?'（一部未登録・主成績はGross）':''}`, `平均建値 ${fmt(preview.after.averageEntryPrice)}`, `総Entry数量 ${fmt(preview.after.totalEntryQuantity)}`, `状態 ${preview.after.status}`);
     if (preview.unknown.length) lines.push('\n未認識項目（原文に保持）:', ...preview.unknown.map(item => `${item.label}: ${item.value}`));
     if (preview.warnings.length) lines.push('\n注意:', ...preview.warnings);
   }
